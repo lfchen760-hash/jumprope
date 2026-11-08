@@ -3,7 +3,7 @@ import 'package:jumprope_core/pose_source.dart';
 
 import 'mediapipe_landmarker.dart';
 
-/// 实时相机数据源。
+/// 实时相机数据源。（触发 CI 编译验证 · 3）
 class CameraPoseSource implements PoseSource {
   final MediaPipeLandmarker landmarker;
   final bool front;
