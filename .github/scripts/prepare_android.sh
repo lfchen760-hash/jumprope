@@ -169,6 +169,52 @@ MODEL_NAME="$(basename "$SRC_MODEL")"
   echo "❌ 模型复制失败"; exit 1; }
 echo "   已放入 Android assets: $MODEL_NAME ($(du -h "$SRC_MODEL" | cut -f1))"
 
+# ── 4.6 MediaPipe 的 R8 keep 规则 ─────────────────────
+# MediaPipe Tasks 不提供 consumer rules。release 构建开了 R8 后，
+# 它内部 protobuf-lite 的字段 platform_ 会被重命名，
+# PoseLandmarker.createFromOptions 反射取值时抛
+#   RuntimeException: Field platform_ for <obfuscated> not found
+# 参见 sceneview/sceneview@0d31314 的修复。
+echo "==> 4.6 写入 MediaPipe keep 规则"
+cat > "$APP_DIR/android/app/proguard-rules.pro" <<'PROGUARD'
+# MediaPipe Tasks：原生层按名字找 Java 类，选项走 protobuf-lite 且按字段名反射
+-keep class com.google.mediapipe.** { *; }
+-keepclassmembers class * extends com.google.protobuf.GeneratedMessageLite { <fields>; }
+# MediaPipe 用 Flogger 记录日志，它靠栈帧找调用方；被重命名会抛 no caller found
+-keep class com.google.common.flogger.** { *; }
+-dontwarn com.google.mediapipe.proto.CalculatorProfileProto$CalculatorProfile
+-dontwarn com.google.mediapipe.proto.GraphTemplateProto$CalculatorGraphTemplate
+PROGUARD
+
+python3 - "$APP_DIR" "$APP_DIR/android/app/build.gradle.kts" <<'PYPATCH'
+import os, sys, glob
+app = sys.argv[1]
+files = glob.glob(os.path.join(app, 'android/app/build.gradle*'))
+if not files:
+    print('   ❌ 找不到 build.gradle')
+    raise SystemExit(1)
+path = files[0]
+s = open(path, encoding='utf-8').read()
+kts = path.endswith('.kts')
+if 'proguard-rules.pro' not in s:
+    if kts:
+        add = ('        isMinifyEnabled = true\n'
+               '        proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")\n')
+    else:
+        add = ("        minifyEnabled true\n"
+               "        proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'\n")
+    idx = s.find('release {')
+    if idx < 0:
+        print('   ❌ 找不到 release 块')
+        raise SystemExit(1)
+    insert_at = s.index('{', idx) + 1
+    s = s[:insert_at] + '\n' + add + s[insert_at:]
+    open(path, 'w', encoding='utf-8').write(s)
+    print('   已注入 proguardFiles')
+else:
+    print('   已存在 proguardFiles')
+PYPATCH
+
 # ── 5. 打印结果，方便在日志里核对 ─────────────────────
 echo "==> 5/5 校验"
 echo "--- dependencies 片段 ---"
