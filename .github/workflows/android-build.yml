@@ -16,6 +16,10 @@ on:
         description: "是否真的构建 APK（否则只做 analyze）"
         type: boolean
         default: true
+      upload_token:
+        description: "上传令牌（可选；配置了 UPLOAD_TOKEN secret 则无需填写）"
+        type: string
+        required: false
 
 jobs:
   build:
@@ -105,10 +109,29 @@ jobs:
           git commit -m "ci: 构建失败日志 [skip ci]" || true
           git push -f origin ci-logs
 
-      - name: 上传 APK
+      - name: 上传 APK（GitHub 制品）
         if: ${{ (github.event_name == 'push' || inputs.build_apk) && success() }}
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: ci_app/build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 7
+
+      - name: 上传 APK（到分发服务器）
+        if: ${{ (github.event_name == 'push' || inputs.build_apk) && success() }}
+        env:
+          TOKEN: ${{ secrets.UPLOAD_TOKEN || inputs.upload_token }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::未配置 UPLOAD_TOKEN，跳过上传到分发服务器"
+            exit 0
+          fi
+          APK=ci_app/build/app/outputs/flutter-apk/app-debug.apk
+          NAME="jumprope-debug-${GITHUB_SHA::7}.apk"
+          ls -lh "$APK"
+          curl -sS --fail -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            --data-binary "@$APK" \
+            "http://101.37.129.56/upload?name=$NAME"
+          echo
+          echo "下载页: http://101.37.129.56/download/"
