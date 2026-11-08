@@ -22,3 +22,7 @@ jumprope/public/download/
 *.zip
 build/
 .DS_Store
+
+# 上传令牌（不入库）
+.upload_token
+*.upload_token
