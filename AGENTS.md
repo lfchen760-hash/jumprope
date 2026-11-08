@@ -261,7 +261,100 @@ Chromium 能跑（LibreOffice 那套依赖补齐了），但 **MediaPipe 用软�
 
 ---
 
-## 9. 验证清单（改完算法必跑）
+## 9. GitHub
+
+### 仓库
+
+```
+https://github.com/lfchen760-hash/jumprope
+主分支: main
+本地推送副本: /root/dsh/test/repo
+```
+
+### 认证：Deploy Key（不是 PAT，更不是密码）
+
+| 项 | 值 |
+|---|---|
+| 私钥 | `/root/dsh/test/.ssh/deploy_key`（只在本机） |
+| 公钥指纹 | `SHA256:3i/YNrkATvDn6vOHN1SCuIDDHDtGDLI9wVaAI8Tdc7M` |
+| 权限 | 该仓库的 Deploy key + Allow write access |
+
+能力边界：**只能读写 `jumprope` 一个仓库**；删不了仓库，看不到其他仓库，改不了账号设置。
+
+### 推送
+
+```bash
+cd /root/dsh/test/repo
+export GIT_SSH_COMMAND="ssh -i /root/dsh/test/.ssh/deploy_key \
+  -o UserKnownHostsFile=/root/dsh/test/.ssh/known_hosts \
+  -o IdentitiesOnly=yes"
+git push
+```
+
+连通性自检：
+
+```bash
+ssh -i /root/dsh/test/.ssh/deploy_key -o IdentitiesOnly=yes -T git@github.com
+# 期望输出: Hi lfchen760-hash/jumprope! You've successfully authenticated...
+```
+
+### 同步流程
+
+源码在工作区，`repo/` 只是推送用的副本。改完代码要 rsync 过去：
+
+```bash
+cd /root/dsh/test/repo
+rsync -a --exclude node_modules --exclude '.git' --exclude '*.log' --exclude '*.png' \
+  --exclude 'public/models' --exclude 'public/wasm' --exclude 'public/download' --exclude 'certs' \
+  /root/dsh/test/jumprope/ ./jumprope/
+rsync -a --exclude '.dart_tool' --exclude '.packages' --exclude 'pubspec.lock' \
+  /root/dsh/test/dart_core/ ./dart_core/
+cp /root/dsh/test/AGENTS.md .
+cp /root/dsh/test/docs/*.md ./docs/
+git add -A && git commit -m "..." && git push
+```
+
+> 注意：`repo/jumprope/` 会残留源目录里的临时脚本，提交前用 `git status` 检查一遍。
+
+### 绝不入库
+
+| 路径 | 原因 |
+|---|---|
+| `jumprope/certs/` | **私钥** |
+| `public/models/*.task` | 5.6MB 二进制 |
+| `public/wasm/*.wasm` | 9MB 二进制 |
+| `public/download/` | 构建产物 |
+| `.pylibs/ .syslibs/ .dart/ .npm-cache/` | 本地依赖 |
+
+已在 `.gitignore` 里。模型由页面首次运行时自动下载。
+
+### 安全约定
+
+- **永远不要索要或使用用户的 GitHub 密码**
+- 用户曾把密码贴在截图里，已提醒修改 + 开 2FA
+- 需要写权限时：Deploy Key（单仓库）> 细粒度 PAT（7 天 + 单仓库）
+- 拿到 token 后**不要写进文件、不要写进 git config**，用完即弃
+
+### CI（P4 才需要）
+
+| 候选 | 说明 |
+|---|---|
+| GitHub Actions | 公开仓库免费无限；私有仓库 2000 分钟/月 |
+| 阿里云效 | 国内机器，个人版有免费额度 |
+
+产物上传接口（已就绪）：
+
+```bash
+curl -X POST -H "Authorization: Bearer <TOKEN>" \
+  --data-binary @app-release.apk \
+  "http://101.37.129.56/upload?name=jumprope-1.0.0.apk"
+```
+
+下载页：`http://101.37.129.56/download/`
+
+---
+
+## 10. 验证清单（改完算法必跑）
 
 ```bash
 cd /root/dsh/test/jumprope
