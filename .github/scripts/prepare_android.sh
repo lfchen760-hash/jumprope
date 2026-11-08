@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 # 把 flutter create 生成的工程改造成能编译本项目的样子。
-# 这里集中了所有"模板差异"，第一次构建失败基本都改这个文件。
+# 所有"模板差异"都集中在这里；构建失败优先查这个脚本。
 set -euo pipefail
 
 APP_DIR="${1:-ci_app}"
-MAIN_KT="$APP_DIR/android/app/src/main/kotlin/com/jumprope/jumprope_app/MainActivity.kt"
+PKG_DIR="$APP_DIR/android/app/src/main/kotlin/com/jumprope/jumprope_app"
+MAIN_KT="$PKG_DIR/MainActivity.kt"
 MANIFEST="$APP_DIR/android/app/src/main/AndroidManifest.xml"
+GRADLE_FILE="$(ls "$APP_DIR"/android/app/build.gradle* 2>/dev/null | head -1)"
 
-echo "==> 1. 注册 PosePlugin"
-mkdir -p "$(dirname "$MAIN_KT")"
+echo "==> 目标工程: $APP_DIR"
+echo "==> gradle 文件: $GRADLE_FILE"
+
+[ -n "$GRADLE_FILE" ] || { echo "找不到 android/app/build.gradle"; exit 1; }
+
+# ── 1. 注册 PosePlugin ────────────────────────────────
+echo "==> 1/4 注册 PosePlugin"
+mkdir -p "$PKG_DIR"
 cat > "$MAIN_KT" <<'KT'
 package com.jumprope.jumprope_app
 
@@ -23,49 +31,57 @@ class MainActivity : FlutterActivity() {
     }
 }
 KT
+grep -q "PosePlugin" "$MAIN_KT" || { echo "MainActivity 写入失败"; exit 1; }
 
-echo "==> 2. 加相机权限"
-if ! grep -q "android.permission.CAMERA" "$MANIFEST"; then
-  python3 - "$MANIFEST" <<'PY'
+# ── 2. 相机权限 ───────────────────────────────────────
+echo "==> 2/4 加相机权限"
+python3 - "$MANIFEST" <<'PY'
 import sys, re
 p = sys.argv[1]
 s = open(p, encoding='utf-8').read()
-perm = ('    <uses-permission android:name="android.permission.CAMERA" />\n'
-        '    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />\n')
-s = re.sub(r'(<manifest[^>]*>\n)', r'\1' + perm, s, count=1)
-open(p, 'w', encoding='utf-8').write(s)
+if 'android.permission.CAMERA' not in s:
+    perm = ('    <uses-permission android:name="android.permission.CAMERA" />\n'
+            '    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />\n')
+    s = re.sub(r'(<manifest[^>]*>\n?)', lambda m: m.group(1) + perm, s, count=1)
+    open(p, 'w', encoding='utf-8').write(s)
 PY
-fi
+grep -q "android.permission.CAMERA" "$MANIFEST" || { echo "权限写入失败"; exit 1; }
 
-echo "==> 3. 加依赖 + minSdk"
-python3 - "$APP_DIR" <<'PY'
-import sys, os, glob
-app = sys.argv[1]
-deps = '''
+# ── 3. 依赖与 minSdk ──────────────────────────────────
+echo "==> 3/4 注入依赖与 minSdk"
+python3 - "$GRADLE_FILE" <<'PY'
+import sys
+path = sys.argv[1]
+s = open(path, encoding='utf-8').read()
+
+deps_body = '''
     implementation("com.google.mediapipe:tasks-vision:0.10.14")
     implementation("androidx.camera:camera-core:1.3.4")
     implementation("androidx.camera:camera-camera2:1.3.4")
     implementation("androidx.camera:camera-lifecycle:1.3.4")
 '''
 
-candidates = glob.glob(os.path.join(app, 'android/app/build.gradle*'))
-assert candidates, '找不到 android/app/build.gradle'
-path = candidates[0]
-s = open(path, encoding='utf-8').read()
-
 if 'mediapipe' not in s:
-    if path.endswith('.kts'):
-        s = s.replace('dependencies {', 'dependencies {' + deps, 1)
-    else:
-        s = s.replace('dependencies {', 'dependencies {' + deps, 1)
+    # 模板里可能根本没有 dependencies 块，直接追加到文件末尾
+    s = s.rstrip() + '\n\ndependencies {\n' + deps_body + '}\n'
 
 # minSdk 24（MediaPipe Tasks 要求）
-for old in ['minSdkVersion flutter.minSdkVersion', 'minSdk = flutter.minSdkVersion',
-            'minSdkVersion 21', 'minSdk = 21']:
-    s = s.replace(old, old.replace('21', '24').replace('flutter.minSdkVersion', '24'))
+s = s.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 24')
+s = s.replace('minSdk = flutter.minSdkVersion', 'minSdk = 24')
+s = s.replace('minSdkVersion 21', 'minSdkVersion 24')
+s = s.replace('minSdk = 21', 'minSdk = 24')
+s = s.replace('minSdkVersion 19', 'minSdkVersion 24')
 
 open(path, 'w', encoding='utf-8').write(s)
-print('已修改', path)
 PY
 
+grep -q "mediapipe" "$GRADLE_FILE" || { echo "❌ 依赖注入失败"; exit 1; }
+echo "   依赖注入 OK"
+
+# ── 4. 打印结果，方便在日志里核对 ─────────────────────
+echo "==> 4/4 校验"
+echo "--- dependencies 片段 ---"
+grep -n -A6 "^dependencies" "$GRADLE_FILE" || true
+echo "--- minSdk ---"
+grep -n "minSdk" "$GRADLE_FILE" || echo "(未找到 minSdk，使用模板默认)"
 echo "==> 完成"
