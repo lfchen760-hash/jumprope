@@ -107,9 +107,9 @@ path = sys.argv[1]
 s = open(path, encoding='utf-8').read()
 
 deps_body = '''
-    // 0.10.14 在 Android 16 (API 36) 上会抛
-    // RuntimeException: Field platform_ for y40 not found（内部反射失败）
-    implementation("com.google.mediapipe:tasks-vision:1.2.2")
+    // 不升 1.2.2：它会带入 litertlm 依赖，缺类导致 R8 失败，
+    // 而 platform_ 的问题靠 proguard keep 规则解决，与版本无关
+    implementation("com.google.mediapipe:tasks-vision:0.10.14")
     implementation("androidx.camera:camera-core:1.3.4")
     implementation("androidx.camera:camera-camera2:1.3.4")
     implementation("androidx.camera:camera-lifecycle:1.3.4")
