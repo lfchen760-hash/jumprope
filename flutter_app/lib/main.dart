@@ -123,7 +123,7 @@ class _HomePageState extends State<HomePage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          if (_textureId > 0)
+          if (_textureId >= 0)
             Positioned.fill(child: Texture(textureId: _textureId))
           else
             const ColoredBox(color: Color(0xFF0B1020)),
@@ -201,7 +201,7 @@ class _HomePageState extends State<HomePage> {
                 _pill('剩余 ${(_state.remainingMs / 1000).ceil()} 秒'),
                 const SizedBox(height: 8),
                 _pill(_phaseText, warn: _active && !_state.framing.ok),
-                if (_active && _textureId <= 0) ...[
+                if (_active && _textureId < 0) ...[
                   const SizedBox(height: 8),
                   _pill('预览纹理不可用（id=$_textureId）', warn: true),
                 ],
