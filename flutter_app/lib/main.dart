@@ -6,6 +6,9 @@ import 'package:jumprope_core/jumprope_core.dart';
 import 'data/pose/camera_pose_source.dart';
 import 'data/pose/mediapipe_landmarker.dart';
 
+/// 构建标识，CI 用 --dart-define=BUILD_ID=xxxx 注入
+const String kBuildId = String.fromEnvironment('BUILD_ID', defaultValue: 'dev');
+
 void main() => runApp(const JumpropeApp());
 
 class JumpropeApp extends StatelessWidget {
@@ -38,6 +41,7 @@ class _HomePageState extends State<HomePage> {
   SessionState _state = SessionState.idle;
   String? _error;
   int _textureId = -1;
+  bool _cameraStarted = false;
 
   bool get _active =>
       _state.phase == SessionPhase.running ||
@@ -67,6 +71,8 @@ class _HomePageState extends State<HomePage> {
       });
 
       await controller.start();
+      _cameraStarted = true;
+      if (mounted) setState(() {});
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -144,6 +150,31 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
+          // 调试角标：一眼看出是哪个版本、纹理有没有拿到
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 10, top: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    'v$kBuildId  tex=$_textureId  cam=${_cameraStarted ? 1 : 0}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                      color: Colors.white.withValues(alpha: 0.75),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
           SafeArea(
             child: Column(
               children: [
@@ -170,6 +201,10 @@ class _HomePageState extends State<HomePage> {
                 _pill('剩余 ${(_state.remainingMs / 1000).ceil()} 秒'),
                 const SizedBox(height: 8),
                 _pill(_phaseText, warn: _active && !_state.framing.ok),
+                if (_active && _textureId <= 0) ...[
+                  const SizedBox(height: 8),
+                  _pill('预览纹理不可用（id=$_textureId）', warn: true),
+                ],
                 if (_state.gate != 'ok') ...[
                   const SizedBox(height: 8),
                   _pill(
