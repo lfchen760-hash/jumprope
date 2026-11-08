@@ -32,9 +32,18 @@ class MediaPipeLandmarker {
     return _initialized;
   }
 
-  /// 关键点流。每个事件是一帧：[PoseFrame]，无人时 landmarks 为空。
-  Stream<PoseFrame> get frames =>
-      _event.receiveBroadcastStream().map(_parse).where((f) => f != null).cast<PoseFrame>();
+  /// 关键点流（**只订阅一次**）。
+  ///
+  /// 注意：`receiveBroadcastStream()` 每次调用都会重新向原生端发 listen，
+  /// 后一次会顶掉前一次的 sink，导致先订阅的那一方收不到数据。
+  /// 所以必须缓存成同一个 broadcast 流，允许多个监听者。
+  late final Stream<PoseFrame> _frames = _event
+      .receiveBroadcastStream()
+      .map(_parse)
+      .where((f) => f != null)
+      .cast<PoseFrame>();
+
+  Stream<PoseFrame> get frames => _frames;
 
   /// 预览小图流（JPEG，约 8fps），用于手机端对准镜头
   Stream<Uint8List> get previewFrames => _preview
