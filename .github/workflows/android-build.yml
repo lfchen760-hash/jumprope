@@ -4,6 +4,12 @@ name: Android 构建（实验）
 # 目的不是发版，而是把 Kotlin 的编译错误暴露出来。
 
 on:
+  # 改了 Flutter/原生代码就自动跑，把编译错误尽早暴露
+  push:
+    paths:
+      - 'flutter_app/**'
+      - '.github/scripts/**'
+      - '.github/workflows/android-build.yml'
   workflow_dispatch:
     inputs:
       build_apk:
