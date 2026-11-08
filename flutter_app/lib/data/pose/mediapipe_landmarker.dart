@@ -69,6 +69,10 @@ class MediaPipeLandmarker {
   Future<int> getPreviewTextureId() async =>
       await _method.invokeMethod<int>('getPreviewTextureId') ?? -1;
 
+  /// 完整诊断信息（设备、模型、权限、MediaPipe、相机）
+  Future<String> getDiagnostics() async =>
+      await _method.invokeMethod<String>('getDiagnostics') ?? '';
+
   /// 预览诊断信息（平台视图创建数 / 绑定 / 挂载 / 尝试次数）
   Future<String> getPreviewDebug() async =>
       await _method.invokeMethod<String>('getPreviewDebug') ?? 'n/a';

@@ -82,14 +82,16 @@ class PoseProcessor(private val context: Context) {
                 landmarker = build(Delegate.GPU)
                 return true
             } catch (e: Throwable) {
-                lastError = "GPU失败: ${e.javaClass.simpleName}: ${e.message}\n"
+                lastError = "GPU失败: ${e.javaClass.simpleName}: ${e.message}\n" +
+                    android.util.Log.getStackTraceString(e).take(900) + "\n"
             }
         }
         try {
             landmarker = build(Delegate.CPU)
             return true
         } catch (e: Throwable) {
-            lastError += "CPU失败: ${e.javaClass.simpleName}: ${e.message}"
+            lastError += "CPU失败: ${e.javaClass.simpleName}: ${e.message}\n" +
+                android.util.Log.getStackTraceString(e).take(900)
             landmarker = null
             return false
         }

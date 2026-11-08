@@ -136,6 +136,11 @@ class CameraStreamHandler(
         }
     }
 
+    /** 相机状态摘要，给诊断面板用 */
+    fun diagnostics(): String =
+        "running=$running previewBound=$previewBound attached=$previewAttached " +
+            "attempts=$previewAttempts req=$previewRequests"
+
     fun stop() {
         running = false
         try {

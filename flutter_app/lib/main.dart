@@ -69,6 +69,8 @@ class _HomePageState extends State<HomePage> {
   bool _cameraStarted = false;
   int _previewReq = -1;
   int _durationSec = 60;
+  String _diag = '';
+  bool _showDiag = false;
   String _previewDebug = '-';
 
   bool get _active =>
@@ -76,6 +78,21 @@ class _HomePageState extends State<HomePage> {
       _state.phase == SessionPhase.positioning ||
       _state.phase == SessionPhase.countdown ||
       _state.phase == SessionPhase.paused;
+
+  Future<void> _loadDiag() async {
+    final native = await _landmarker.getDiagnostics();
+    final extra = StringBuffer()
+      ..writeln('build=$kBuildId')
+      ..writeln('dartFrames=${_source?.frameCount ?? 0}')
+      ..writeln('dartPoses=${_source?.poseCount ?? 0}')
+      ..writeln('phase=${_state.phase}')
+      ..writeln('gate=${_state.gate} framing=${_state.framing.ok}'
+          ' (${_state.framing.message})')
+      ..writeln('textureId=$_textureId');
+    if (mounted) {
+      setState(() => _diag = '$native\n$extra');
+    }
+  }
 
   Future<void> _start() async {
     setState(() {
@@ -135,6 +152,8 @@ class _HomePageState extends State<HomePage> {
           _state = SessionState.idle;
         });
       }
+      await _loadDiag();
+      if (mounted) setState(() => _showDiag = true);
     }
   }
 
@@ -229,6 +248,28 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
+
+          if (_showDiag)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => setState(() => _showDiag = false),
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.92),
+                  padding: const EdgeInsets.fromLTRB(14, 44, 14, 14),
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      _diag.isEmpty ? '（点「诊断信息」获取）' : _diag,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        height: 1.5,
+                        fontFamily: 'monospace',
+                        color: Color(0xFFB9F6CA),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
           // 顶部渐变压暗，保证文字可读
           Positioned(
@@ -367,7 +408,18 @@ class _HomePageState extends State<HomePage> {
                                   ),
                               ],
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 10),
+                            TextButton(
+                              onPressed: () async {
+                                await _loadDiag();
+                                setState(() => _showDiag = !_showDiag);
+                              },
+                              child: Text(
+                                _showDiag ? '收起诊断' : '诊断信息',
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
                             SizedBox(
                               width: double.infinity,
                               child: FilledButton(

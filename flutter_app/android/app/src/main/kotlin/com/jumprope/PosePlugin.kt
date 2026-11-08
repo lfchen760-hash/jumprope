@@ -156,6 +156,41 @@ class PosePlugin :
                 result.success(ok)
             }
 
+            "getDiagnostics" -> {
+                val sb = StringBuilder()
+                val b = android.os.Build::class.java
+                sb.append("device=").append(android.os.Build.MANUFACTURER)
+                    .append(' ').append(android.os.Build.MODEL).append('\n')
+                sb.append("android=").append(android.os.Build.VERSION.RELEASE)
+                    .append(" API ").append(android.os.Build.VERSION.SDK_INT).append('\n')
+                sb.append("abis=").append(android.os.Build.SUPPORTED_ABIS.joinToString(",")).append('\n')
+
+                val modelNames = listOf("pose_landmarker_lite.task")
+                for (m in modelNames) {
+                    val info = try {
+                        context.assets.open(m).use { "OK ${it.available()}B" }
+                    } catch (e: Throwable) {
+                        "FAIL ${e.javaClass.simpleName}: ${e.message}"
+                    }
+                    sb.append("model:assets/").append(m).append("=").append(info).append('\n')
+                }
+
+                val perm = try {
+                    androidx.core.content.ContextCompat.checkSelfPermission(
+                        context, android.Manifest.permission.CAMERA,
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                } catch (e: Throwable) {
+                    false
+                }
+                sb.append("cameraPermission=").append(perm).append('\n')
+                sb.append("activity=").append(activity != null).append('\n')
+                sb.append("mpInit=")
+                    .append(processor?.lastError?.ifBlank { "ok" } ?: "未调用 init")
+                    .append('\n')
+                sb.append("camera=").append(camera?.diagnostics() ?: "未启动").append('\n')
+                result.success(sb.toString())
+            }
+
             "getInitError" -> {
                 result.success(processor?.lastError ?: "")
             }
