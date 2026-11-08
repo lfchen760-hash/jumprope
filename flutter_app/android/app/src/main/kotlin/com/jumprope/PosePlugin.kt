@@ -36,7 +36,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class PosePlugin :
     FlutterPlugin,
-    MethodCallHandler,
+    MethodChannel.MethodCallHandler,
     EventChannel.StreamHandler,
     ActivityAware {
 
