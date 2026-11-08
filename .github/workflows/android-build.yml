@@ -1,0 +1,76 @@
+name: Android 构建（实验）
+
+# 手动触发：首次运行大概率失败，需要按日志逐步修。
+# 目的不是发版，而是把 Kotlin 的编译错误暴露出来。
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_apk:
+        description: "是否真的构建 APK（否则只做 analyze）"
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    name: 生成脚手架并构建
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: 下载姿态模型
+        run: |
+          mkdir -p flutter_app/assets
+          curl -sSL -o flutter_app/assets/pose_landmarker_lite.task \
+            "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
+          ls -lh flutter_app/assets/
+
+      - name: 生成 Flutter 脚手架
+        run: |
+          flutter create --org com.jumprope --platforms=android \
+            --project-name jumprope_app ci_app
+
+      - name: 覆盖我们的源码
+        run: |
+          rm -rf ci_app/lib
+          cp -r flutter_app/lib ci_app/lib
+          cp flutter_app/pubspec.yaml ci_app/pubspec.yaml
+          mkdir -p ci_app/assets
+          cp flutter_app/assets/*.task ci_app/assets/
+          mkdir -p ci_app/android/app/src/main/kotlin/com/jumprope
+          cp -r flutter_app/android/app/src/main/kotlin/com/jumprope/. \
+                ci_app/android/app/src/main/kotlin/com/jumprope/
+
+      - name: 注册插件 + 权限 + 依赖
+        run: bash .github/scripts/prepare_android.sh ci_app
+
+      - name: 解析依赖
+        working-directory: ci_app
+        run: flutter pub get
+
+      - name: 静态分析
+        working-directory: ci_app
+        run: flutter analyze || true
+
+      - name: 构建 APK
+        if: ${{ inputs.build_apk }}
+        working-directory: ci_app
+        run: flutter build apk --debug
+
+      - name: 上传 APK
+        if: ${{ inputs.build_apk && success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: ci_app/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 7

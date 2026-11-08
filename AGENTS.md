@@ -374,12 +374,23 @@ git add -A && git commit -m "..." && git push
 - 需要写权限时：Deploy Key（单仓库）> 细粒度 PAT（7 天 + 单仓库）
 - 拿到 token 后**不要写进文件、不要写进 git config**，用完即弃
 
-### CI（P4 才需要）
+### CI（已配置）
 
-| 候选 | 说明 |
-|---|---|
-| GitHub Actions | 公开仓库免费无限；私有仓库 2000 分钟/月 |
-| 阿里云效 | 国内机器，个人版有免费额度 |
+| 工作流 | 触发 | 内容 |
+|---|---|---|
+| `.github/workflows/ci.yml` | push / PR | Dart 核心测试 + Flutter analyze |
+| `.github/workflows/android-build.yml` | 手动 | 生成脚手架 → 构建 APK（实验性） |
+
+**本地等价命令**（CI 会跑同样的东西）：
+
+```bash
+cd dart_core && dart analyze && dart run test/all_tests.dart
+cd flutter_app && flutter pub get && flutter analyze
+```
+
+**android-build 的已知风险**：`flutter create` 模板随版本变化，
+补丁逻辑全在 `.github/scripts/prepare_android.sh`，首次构建失败基本改那里。
+本机无 Android SDK，无法离线验证，只能靠 CI 日志迭代。
 
 产物上传接口（已就绪）：
 

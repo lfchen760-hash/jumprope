@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # ── 1. 纯 Dart 核心：算法一致性 ──────────────────
+  dart-core:
+    name: Dart 核心测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: 静态分析
+        working-directory: dart_core
+        run: dart analyze
+
+      - name: 单元测试（黄金向量 + 姿态 + 回放 + 会话）
+        working-directory: dart_core
+        run: dart run test/all_tests.dart
+
+  # ── 2. Flutter 外壳：Dart 侧分析 ────────────────
+  flutter:
+    name: Flutter 分析
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: 解析依赖
+        working-directory: flutter_app
+        run: flutter pub get
+
+      - name: 静态分析
+        working-directory: flutter_app
+        run: flutter analyze
