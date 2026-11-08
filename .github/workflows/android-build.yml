@@ -79,7 +79,8 @@ jobs:
         working-directory: ci_app
         run: |
           set -o pipefail
-          flutter build apk --debug 2>&1 | tee /tmp/build.log
+          # release + 仅 arm64：体积约为 debug 全架构的 1/5，手机下载更快
+          flutter build apk --release --target-platform android-arm64 2>&1 | tee /tmp/build.log
 
       - name: 失败时把日志推回仓库
         if: failure()
@@ -93,7 +94,7 @@ jobs:
             echo
             echo "## 复现命令"
             echo '```'
-            echo "flutter build apk --debug"
+            echo "flutter build apk --release --target-platform android-arm64"
             echo '```'
             echo
             echo "## 日志（末尾 600 行）"
@@ -113,8 +114,8 @@ jobs:
         if: ${{ (github.event_name == 'push' || inputs.build_apk) && success() }}
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: ci_app/build/app/outputs/flutter-apk/app-debug.apk
+          name: app-release
+          path: ci_app/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 7
 
       - name: 发布到 Release（供服务器自动拉取）
@@ -122,7 +123,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          APK=ci_app/build/app/outputs/flutter-apk/app-debug.apk
+          APK=ci_app/build/app/outputs/flutter-apk/app-release.apk
           cp "$APK" jumprope-debug.apk
           ls -lh jumprope-debug.apk
 
