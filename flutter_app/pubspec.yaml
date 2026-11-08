@@ -10,6 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  camera: ^0.11.0
   jumprope_core:
     path: ../dart_core
   # 语音与音效（P3 用）

@@ -5,13 +5,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:jumprope_core/jumprope_core.dart';
 
+import 'camera_test_page.dart';
 import 'data/pose/camera_pose_source.dart';
 import 'data/pose/mediapipe_landmarker.dart';
 
 /// 构建标识，CI 用 --dart-define=BUILD_ID=xxxx 注入
 const String kBuildId = String.fromEnvironment('BUILD_ID', defaultValue: 'dev');
 
-void main() => runApp(const JumpropeApp());
+/// 相机最小验证模式：只需 --dart-define=CAMERA_TEST=true
+const bool kCameraTest = bool.fromEnvironment('CAMERA_TEST');
+
+void main() => runApp(kCameraTest ? const _TestApp() : const JumpropeApp());
+
+class _TestApp extends StatelessWidget {
+  const _TestApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: CameraTestPage(),
+    );
+  }
+}
 
 class JumpropeApp extends StatelessWidget {
   const JumpropeApp({super.key});
