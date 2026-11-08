@@ -91,8 +91,52 @@ function warmCompression() {
   setTimeout(next, 50);
 }
 
+
+/* ---------------- 下载页 ---------------- */
+const DOWNLOAD_EXT = ['.apk', '.zip', '.txt', '.log', '.json'];
+
+function renderDownloadPage() {
+  let files = [];
+  try {
+    files = fs.readdirSync(DOWNLOAD_DIR)
+      .filter((f) => DOWNLOAD_EXT.some((e) => f.toLowerCase().endsWith(e)))
+      .map((f) => ({ name: f, mtime: fs.statSync(path.join(DOWNLOAD_DIR, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime)
+      .map((x) => x.name);
+  } catch (_) {}
+
+  const rows = files.map((f) => {
+    const st = fs.statSync(path.join(DOWNLOAD_DIR, f));
+    const mb = (st.size / 1048576).toFixed(1);
+    const t = new Date(st.mtimeMs).toLocaleString('zh-CN');
+    return `<li><a href="/download/${encodeURIComponent(f)}">${f}</a><span>${mb} MB · ${t}</span></li>`;
+  }).join('');
+
+  return `<!doctype html><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>下载</title><style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:#0b1020;color:#e8ecff;padding:24px;line-height:1.7;margin:0}
+h1{font-size:20px;margin:0 0 4px}p{opacity:.5;font-size:13px;margin:0 0 20px}
+ul{list-style:none;padding:0;margin:0}
+li{padding:14px 16px;margin:10px 0;border-radius:12px;background:rgba(140,180,255,.07);border:1px solid rgba(140,180,255,.14)}
+a{color:#6ea8ff;font-size:17px;text-decoration:none;display:block;word-break:break-all}
+span{opacity:.45;font-size:12px}
+</style><h1>下载</h1><p>点文件名即可下载</p><ul>${rows || '<li>暂无文件</li>'}</ul>`;
+}
+
 function handler(req, res) {
   let urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+
+  if (urlPath === '/download' || urlPath === '/download/') {
+    const html = renderDownloadPage();
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Length': Buffer.byteLength(html),
+      'Cache-Control': 'no-store',
+    });
+    return res.end(html);
+  }
+
   if (urlPath === '/') urlPath = '/index.html';
 
   const filePath = path.normalize(path.join(ROOT, urlPath));
@@ -192,22 +236,16 @@ http.createServer((req, res) => {
   }
 
   /* ---- 下载列表 ---- */
-  if (req.method === 'GET' && (u === '/' || u === '/index.html' || u === '/download' || u === '/download/')) {
+  if ((req.method === 'GET' || req.method === 'HEAD') &&
+      (u === '/' || u === '/index.html' || u === '/download' || u === '/download/')) {
     // 只列下载页，主页面仍然跳 HTTPS
     if (u === '/download' || u === '/download/' || req.headers['x-want-download'] === '1') {
-      let files = [];
-      try { files = fs.readdirSync(DOWNLOAD_DIR).filter((f) => f.endsWith('.apk')); } catch (_) {}
-      const rows = files.map((f) => {
-        const st = fs.statSync(path.join(DOWNLOAD_DIR, f));
-        const mb = (st.size / 1048576).toFixed(1);
-        const t = new Date(st.mtimeMs).toLocaleString('zh-CN');
-        return `<li><a href="/${encodeURIComponent(f)}">${f}</a> <span>${mb} MB · ${t}</span></li>`;
-      }).join('');
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      return res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>下载</title><style>body{font-family:-apple-system,sans-serif;background:#0b1020;color:#e8ecff;padding:24px;line-height:1.9}
-a{color:#6ea8ff;font-size:17px}li{margin:10px 0}span{opacity:.5;font-size:13px}</style>
-<h2>安装包</h2><ul>${rows || '<li>暂无文件</li>'}</ul>`);
+      const html = renderDownloadPage();
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Length': Buffer.byteLength(html),
+      });
+      return res.end(html);
     }
   }
 

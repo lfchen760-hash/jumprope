@@ -164,6 +164,12 @@
   #modelHint.ok { color: #6ee7a8; opacity: 1; }
   #modelHint.bad { color: #ff8a8a; opacity: 1; }
   #modelHint.loading { color: #9db8ff; }
+  #cover .dl {
+    flex: 0 0 auto; display: inline-block; margin-top: 2px;
+    font-size: 13px; color: #8fb4ff; text-decoration: none;
+    border-bottom: 1px dashed rgba(143,180,255,.35); padding-bottom: 2px;
+  }
+  #cover .dl:active { opacity: .6; }
   #cover .tips { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
   #cover .tip {
     font-size: 12px; padding: 7px 12px; border-radius: 999px;
@@ -287,6 +293,7 @@
         <span class="tip">画面中一人</span>
       </div>
       <div id="modelHint"></div>
+      <a class="dl" href="./download/" target="_blank" rel="noopener">📦 下载 Android 版（APK）</a>
       <div id="err"></div>
     </div>
   </div>
