@@ -132,7 +132,9 @@ class _HomePageState extends State<HomePage> {
       ..writeln('phase=${_state.phase}')
       ..writeln('gate=${_state.gate} framing=${_state.framing.ok}'
           ' (${_state.framing.message})')
-      ..writeln('textureId=$_textureId');
+      ..writeln('textureId=$_textureId')
+      ..writeln('voice=${_voice.status} enabled=${_voice.enabled} '
+          'ready=${_voice.isReady}');
     if (mounted) {
       setState(() => _diag = '$native\n$extra');
     }

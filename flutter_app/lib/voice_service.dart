@@ -14,18 +14,28 @@ class VoiceService {
 
   bool get isReady => _ready;
 
+  /// 初始化状态摘要（诊断面板用）
+  String status = '未初始化';
+
   Future<void> init() async {
     if (_ready) return;
     try {
-      await _tts.setLanguage('zh-CN');
+      final engines = await _tts.getEngines;
+      final langs = await _tts.getLanguages;
+      final avail = await _tts.isLanguageAvailable('zh-CN');
+      final set = await _tts.setLanguage('zh-CN');
+      status = 'engines=${engines is List ? engines.length : engines} '
+          'langs=${langs is List ? langs.length : langs} '
+          'zhAvail=$avail setLang=$set';
       await _tts.setSpeechRate(0.52);
       await _tts.setVolume(1.0);
       await _tts.setPitch(1.0);
       // 打断上一句，保证倒数不排队
       await _tts.awaitSpeakCompletion(false);
       _ready = true;
-    } catch (_) {
+    } catch (e) {
       _ready = false;
+      status = 'ERR $e';
     }
   }
 

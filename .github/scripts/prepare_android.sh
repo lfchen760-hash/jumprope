@@ -83,6 +83,23 @@ if 'android.permission.CAMERA' not in s:
 PY
 grep -q "android.permission.CAMERA" "$MANIFEST" || { echo "权限写入失败"; exit 1; }
 
+# Android 11+ 需要声明 TTS 服务可见性，否则 TextToSpeech 找不到引擎（无声）
+python3 - "$MANIFEST" <<'PYTTS'
+import sys, re
+p = sys.argv[1]
+s = open(p, encoding='utf-8').read()
+if 'TTS_SERVICE' not in s:
+    queries = ('    <queries>\n'
+               '        <intent>\n'
+               '            <action android:name="android.intent.action.TTS_SERVICE" />\n'
+               '        </intent>\n'
+               '    </queries>\n')
+    s = re.sub(r'(</manifest>)', queries + r'\1', s, count=1)
+    open(p, 'w', encoding='utf-8').write(s)
+PYTTS
+grep -q "TTS_SERVICE" "$MANIFEST" || { echo "TTS 可见性写入失败"; exit 1; }
+echo "   已声明 TTS 服务可见性"
+
 # ── 2.5 关闭 Impeller（Texture 组件在黑屏问题修复前不可用）──
 echo "==> 2.5 关闭 Impeller"
 python3 - "$MANIFEST" <<'PYMSG'
