@@ -117,21 +117,21 @@ jobs:
           path: ci_app/build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 7
 
-      - name: 上传 APK（到分发服务器）
+      - name: 发布到 Release（供服务器自动拉取）
         if: ${{ (github.event_name == 'push' || inputs.build_apk) && success() }}
         env:
-          TOKEN: ${{ secrets.UPLOAD_TOKEN || inputs.upload_token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ -z "$TOKEN" ]; then
-            echo "::warning::未配置 UPLOAD_TOKEN，跳过上传到分发服务器"
-            exit 0
-          fi
           APK=ci_app/build/app/outputs/flutter-apk/app-debug.apk
-          NAME="jumprope-debug-${GITHUB_SHA::7}.apk"
-          ls -lh "$APK"
-          curl -sS --fail -X POST \
-            -H "Authorization: Bearer $TOKEN" \
-            --data-binary "@$APK" \
-            "http://101.37.129.56/upload?name=$NAME"
-          echo
-          echo "下载页: http://101.37.129.56/download/"
+          cp "$APK" jumprope-debug.apk
+          ls -lh jumprope-debug.apk
+
+          # Release 资产是公开可下载的，服务器无需任何凭证即可拉取
+          gh release view debug-latest >/dev/null 2>&1 \
+            || gh release create debug-latest \
+                 --title "Debug 构建" \
+                 --notes "自动构建产物，最新一次构建会覆盖" \
+                 --prerelease
+
+          gh release upload debug-latest jumprope-debug.apk --clobber
+          echo "已发布: https://github.com/${GITHUB_REPOSITORY}/releases/tag/debug-latest"
