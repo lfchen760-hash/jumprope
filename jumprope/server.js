@@ -96,32 +96,57 @@ function warmCompression() {
 const DOWNLOAD_EXT = ['.apk', '.zip', '.txt', '.log', '.json'];
 
 function renderDownloadPage() {
+  const EXT = ['.apk', '.zip', '.txt', '.log', '.json'];
   let files = [];
   try {
     files = fs.readdirSync(DOWNLOAD_DIR)
-      .filter((f) => DOWNLOAD_EXT.some((e) => f.toLowerCase().endsWith(e)))
+      .filter((f) => EXT.some((e) => f.toLowerCase().endsWith(e)))
       .map((f) => ({ name: f, mtime: fs.statSync(path.join(DOWNLOAD_DIR, f)).mtimeMs }))
       .sort((a, b) => b.mtime - a.mtime)
       .map((x) => x.name);
   } catch (_) {}
 
-  const rows = files.map((f) => {
+  const apks = files.filter((f) => f.toLowerCase().endsWith('.apk'));
+  const others = files.filter((f) => !f.toLowerCase().endsWith('.apk'));
+
+  const item = (f) => {
     const st = fs.statSync(path.join(DOWNLOAD_DIR, f));
     const mb = (st.size / 1048576).toFixed(1);
     const t = new Date(st.mtimeMs).toLocaleString('zh-CN');
     return `<li><a href="/download/${encodeURIComponent(f)}">${f}</a><span>${mb} MB · ${t}</span></li>`;
-  }).join('');
+  };
+
+  const apkList = apks.length
+    ? '<ul>' + apks.map(item).join('') + '</ul>'
+    : `<div class="empty"><strong>还没有安装包</strong>
+         <p>CI 构建完成后会自动出现在这里。<br>
+         若一直没有，检查仓库是否配置了 <code>UPLOAD_TOKEN</code>。</p></div>`;
+
+  const otherList = others.length
+    ? `<h2>其他文件</h2><ul>${others.map(item).join('')}</ul>`
+    : '';
 
   return `<!doctype html><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>下载</title><style>
 body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:#0b1020;color:#e8ecff;padding:24px;line-height:1.7;margin:0}
-h1{font-size:20px;margin:0 0 4px}p{opacity:.5;font-size:13px;margin:0 0 20px}
+h1{font-size:21px;margin:0 0 4px}
+h2{font-size:15px;margin:28px 0 8px;opacity:.6;font-weight:500}
+.sub{opacity:.5;font-size:13px;margin:0 0 18px}
 ul{list-style:none;padding:0;margin:0}
 li{padding:14px 16px;margin:10px 0;border-radius:12px;background:rgba(140,180,255,.07);border:1px solid rgba(140,180,255,.14)}
 a{color:#6ea8ff;font-size:17px;text-decoration:none;display:block;word-break:break-all}
 span{opacity:.45;font-size:12px}
-</style><h1>下载</h1><p>点文件名即可下载</p><ul>${rows || '<li>暂无文件</li>'}</ul>`;
+.empty{padding:26px 18px;border-radius:12px;border:1px dashed rgba(140,180,255,.25);background:rgba(140,180,255,.04)}
+.empty strong{font-size:15px}
+.empty p{opacity:.5;font-size:13px;margin:8px 0 0}
+code{background:rgba(255,255,255,.1);padding:1px 5px;border-radius:4px;font-size:12px}
+.tip{margin-top:26px;font-size:12px;opacity:.4;line-height:1.8}
+</style>
+<h1>下载</h1><p class="sub">点文件名即可下载</p>
+${apkList}${otherList}
+<div class="tip">安装提示：Android 首次安装需允许「安装未知来源应用」。<br>
+这是调试版（debug），用于真机验证，不是正式发布包。</div>`;
 }
 
 function handler(req, res) {
