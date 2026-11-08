@@ -78,8 +78,27 @@ PY
 grep -q "mediapipe" "$GRADLE_FILE" || { echo "❌ 依赖注入失败"; exit 1; }
 echo "   依赖注入 OK"
 
-# ── 4. 打印结果，方便在日志里核对 ─────────────────────
-echo "==> 4/4 校验"
+# ── 4. Gradle 发行包换国内镜像（GitHub Release CDN 经常 504）──
+echo "==> 4/5 检查 Gradle 发行包源"
+WRAPPER="$APP_DIR/android/gradle/wrapper/gradle-wrapper.properties"
+if [ -f "$WRAPPER" ]; then
+  VER="$(grep -oE 'gradle-[0-9.]+-(all|bin)\.zip' "$WRAPPER" | head -1)"
+  if [ -n "$VER" ]; then
+    MIRROR="https://mirrors.cloud.tencent.com/gradle/$VER"
+    CODE="$(curl -sI -m 20 -o /dev/null -w '%{http_code}' "$MIRROR" || echo 000)"
+    echo "   版本 $VER  镜像 HTTP $CODE"
+    if [ "$CODE" = "200" ]; then
+      ESCAPED="$(printf '%s' "$MIRROR" | sed 's|:|\\:|g')"
+      sed -i "s|distributionUrl=.*|distributionUrl=$ESCAPED|" "$WRAPPER"
+      echo "   已切换到镜像源"
+    else
+      echo "   镜像不可用，保留原源"
+    fi
+  fi
+fi
+
+# ── 5. 打印结果，方便在日志里核对 ─────────────────────
+echo "==> 5/5 校验"
 echo "--- dependencies 片段 ---"
 grep -n -A6 "^dependencies" "$GRADLE_FILE" || true
 echo "--- minSdk ---"
