@@ -1,0 +1,28 @@
+name: jumprope_app
+description: 跳绳 AI 计数（Android）
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.0.0
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  jumprope_core:
+    path: ../dart_core
+  # 语音与音效（P3 用）
+  flutter_tts: ^4.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  # 模型不入库（5.6MB）。接入时先放好再取消注释：
+  #   mkdir -p assets && cp ../jumprope/public/models/pose_landmarker_lite.task assets/
+  # assets:
+  #   - assets/pose_landmarker_lite.task

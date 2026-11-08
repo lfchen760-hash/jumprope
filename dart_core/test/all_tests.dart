@@ -11,7 +11,14 @@ import 'dart:io';
 
 import '../lib/counter.dart';
 import '../lib/landmark.dart';
+import '../lib/framing.dart';
+import '../lib/pose_frame.dart';
+import '../lib/pose_source.dart';
 import '../lib/posture.dart';
+import '../lib/replay_pose_source.dart';
+import '../lib/session_controller.dart';
+import '../lib/session_state.dart';
+import 'dart:async';
 
 int _pass = 0;
 int _fail = 0;
@@ -200,13 +207,115 @@ void testPosture() {
   check('NaN 场景不产生 NaN', p.tilt.isFinite && p.kneeL.isFinite);
 }
 
+
+/* ---------------- 会话编排 ---------------- */
+
+/// 造一个站立的人：髋部 y = hipY，整体高 0.55
+List<Landmark> skeleton(double hipY) {
+  final lm = List<Landmark>.filled(33, const Landmark(0.5, 0.5, 0, 0.9));
+  void put(int i, double x, double y, [double v = 0.9]) {
+    lm[i] = Landmark(x, y, 0, v);
+  }
+
+  put(0, 0.5, hipY - 0.30);   // 鼻子
+  put(11, 0.44, hipY - 0.25); // 左肩
+  put(12, 0.56, hipY - 0.25); // 右肩
+  put(23, 0.45, hipY);        // 左髋
+  put(24, 0.55, hipY);        // 右髋
+  put(25, 0.45, hipY + 0.12); // 左膝
+  put(26, 0.55, hipY + 0.12); // 右膝
+  put(27, 0.45, hipY + 0.25); // 左踝
+  put(28, 0.55, hipY + 0.25); // 右踝
+  return lm;
+}
+
+List<PoseFrame> jumpingFrames({double seconds = 6, double fps = 30}) {
+  final out = <PoseFrame>[];
+  final n = (seconds * fps).round();
+  for (var i = 0; i < n; i++) {
+    final t = i * 1000 / fps;
+    final phase = (i % (fps / 2.5).round()) / (fps / 2.5);
+    final lift = phase < 0.5 ? 0.045 : 0.0;
+    out.add(PoseFrame(t, skeleton(0.50 - lift)));
+  }
+  return out;
+}
+
+void testReplaySource() {
+  section('日志回放数据源');
+  final frames = jumpingFrames(seconds: 1);
+  final src = ReplayPoseSource();
+  src.loadFrames(frames);
+  check('加载帧数正确', src.length == frames.length, '实际 ${src.length}');
+  check('kind 为 replay', src.kind == SourceKind.replay);
+}
+
+Future<void> testSession() async {
+  section('会话编排（取景 → 计数 → 结束）');
+
+  final frames = jumpingFrames(seconds: 8);
+  final src = ReplayPoseSource();
+  src.loadFrames(frames);
+  final sc = SessionController(
+    source: src,
+    durationSec: 4,
+    countdownSec: 0,
+    stableMs: 300,
+  );
+
+  final phases = <SessionPhase>[];
+  final sub = sc.state.listen((s) {
+    if (phases.isEmpty || phases.last != s.phase) phases.add(s.phase);
+  });
+
+  await sc.start();
+  await Future<void>.delayed(const Duration(milliseconds: 50));
+  await sub.cancel();
+
+  check('经历取景阶段', phases.contains(SessionPhase.positioning),
+      '实际 $phases');
+  check('进入计数阶段', phases.contains(SessionPhase.running), '实际 $phases');
+  check('最终结束', phases.contains(SessionPhase.finished), '实际 $phases');
+  check('计数大于 0', sc.current.count > 0, '实际 ${sc.current.count}');
+  check('结束后剩余时间为 0', sc.current.remainingMs == 0);
+  await sc.dispose();
+}
+
+void testFramingRejectsBadPose() {
+  section('取景判定');
+  final far = PoseFrame(0, skeleton(0.5));
+  // 把整体压缩，高度不足 0.30
+  final small = PoseFrame(
+    0,
+    far.landmarks
+        .map((p) => Landmark(0.5 + (p.x - 0.5) * 0.3, 0.5 + (p.y - 0.5) * 0.3, 0, p.visibility))
+        .toList(),
+  );
+  check('太远被拒', !evaluateFramingForTest(small));
+
+  final noFeet = PoseFrame(
+    0,
+    far.landmarks.asMap().entries.map((e) {
+      final l = e.value;
+      final v = (e.key == 27 || e.key == 28) ? 0.1 : l.visibility;
+      return Landmark(l.x, l.y, l.z, v);
+    }).toList(),
+  );
+  check('脚不可见被拒', !evaluateFramingForTest(noFeet));
+
+  check('正常站立通过', evaluateFramingForTest(far));
+}
+
 /* ---------------- 入口 ---------------- */
 
-void main() {
+Future<void> main() async {
   final sw = Stopwatch()..start();
   testGoldenVectors();
   testCounterBehaviour();
   testPosture();
+  testReplaySource();
+  await testSession();
+  testFramingRejectsBadPose();
 
   print('\n${'=' * 50}');
   print('通过 $_pass  失败 $_fail  用时 ${sw.elapsedMilliseconds}ms');

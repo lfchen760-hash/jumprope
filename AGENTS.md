@@ -45,10 +45,18 @@ Flutter 版    = 最终产品，仅 Android
 │   │   └── count_golden.mjs     黄金向量 → 计数
 │   └── server.js                HTTPS 8080 / HTTP 80 / 上传下载
 │
-├── dart_core/                   Dart 计数核心（无 Flutter 依赖）
+├── dart_core/                   Dart 核心（无 Flutter 依赖，可本机验证）
 │   ├── lib/counter.dart         ★ counter.mjs 的移植
+│   ├── lib/posture.dart         姿态判定
+│   ├── lib/pose_source.dart     数据源抽象（相机/视频/回放）
+│   ├── lib/replay_pose_source.dart  日志回放
+│   ├── lib/session_controller.dart  会话编排
 │   ├── verify.dart              跑黄金向量验证
-│   └── pubspec.yaml
+│   └── test/all_tests.dart      ★ 全部单元测试（24 项）
+│
+├── flutter_app/                 Flutter 外壳（未编译验证）
+│   ├── lib/data/pose/           通道封装 + 两个 PoseSource
+│   └── android/.../com/jumprope/  PosePlugin / PoseProcessor / CameraStream
 │
 ├── video/                       三个校准视频（标注在文件名里）
 └── docs/
@@ -93,7 +101,7 @@ node test/replay.mjs /tmp/lm_168个断0次.json 168
 cd /root/dsh/test/dart_core
 dart run verify.dart ../jumprope/test/golden
 
-# Dart 全部单元测试（计数 + 姿态，无第三方依赖）
+# Dart 全部单元测试（计数 + 姿态 + 回放 + 会话，无第三方依赖）
 cd /root/dsh/test/dart_core
 dart run test/all_tests.dart
 ```

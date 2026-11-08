@@ -396,7 +396,10 @@ test/widget/        关键页面渲染
 > `package:test` 在本机装不上（沙箱禁止 pub 缓存的跨设备 rename），
 > 改用纯 Dart 断言 runner，语义等价。
 
-### P2 · Android 原生桥 + 离线 video（2 周）
+### P2 · Android 原生桥 + 离线 video（2 周）— 🟡 骨架已写，待编译
+
+> 本机无 Flutter/Android SDK，以下代码**未经编译验证**，首次编译放在 CI。
+> 但纯 Dart 部分（PoseSource 抽象、SessionController、回放源）已在本机测试通过。
 
 | 任务 |
 |---|
