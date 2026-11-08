@@ -10,6 +10,8 @@ import { readFileSync } from 'node:fs';
 import { createCounter, DEFAULT_CFG } from '../public/counter.mjs';
 import { postureOf } from '../public/posture.mjs';
 
+const toLm = (arr) => arr.map(([x, y, z, v]) => ({ x, y, z, visibility: v }));
+
 const [, , input, expectedArg, ...flags] = process.argv;
 if (!input) {
   console.log('用法: node test/replay.mjs landmarks.json [真实次数] [--sweep]');
@@ -29,7 +31,7 @@ function frameToSignal(fr) {
   const vis = Math.min(lm[23][3] ?? 1, lm[24][3] ?? 1);
   if (vis < 0.45) return null;
   const torso = Math.max(Math.abs(hipY - shY), 0.03);
-  const post = postureOf(lm);
+  const post = postureOf(toLm(lm));
   const hipX = (lm[23][0] + lm[24][0]) / 2;
   return { hipY, torso, t: fr.t, ctx: { hipX, tilt: post.tilt, kneeL: post.kneeL, kneeR: post.kneeR } };
 }

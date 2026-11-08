@@ -89,9 +89,13 @@ bash test/verify_both.sh /root/dsh/test/video/168个断0次.mp4 168
 # 只跑 JS
 node test/replay.mjs /tmp/lm_168个断0次.json 168
 
-# 只跑 Dart
+# 只跑 Dart 计数
 cd /root/dsh/test/dart_core
 dart run verify.dart ../jumprope/test/golden
+
+# Dart 全部单元测试（计数 + 姿态，无第三方依赖）
+cd /root/dsh/test/dart_core
+dart run test/all_tests.dart
 ```
 
 ### 提取关键点（用于离线分析）
@@ -237,6 +241,33 @@ Chromium 能跑（LibreOffice 那套依赖补齐了），但 **MediaPipe 用软�
 ### npm
 
 `/root/.npm` 不可写，必须设 `npm_config_cache` 到工作区。
+
+### postureOf 的入参格式（踩过）
+
+`postureOf` 要的是 `{x, y, visibility}` **对象**，而原始关键点 JSON 存的是
+`[x, y, z, vis]` **数组**。
+
+直接传数组不会报错，会静默取出 `undefined` → 全部走 NaN 兜底 →
+`tilt=0, kneeL=180`，**弯腰闸门永远不触发，测试却"通过"**。
+
+离线脚本里必须先转换：
+
+```js
+const toLm = (arr) => arr.map(([x, y, z, v]) => ({ x, y, z, visibility: v }));
+const post = postureOf(toLm(lm));
+```
+
+判断有没有踩：抽查黄金向量里 `tilt` 是否全为 0。全 0 就是踩了。
+
+### dart pub get 用不了
+
+```
+Rename failed ... Invalid cross-device link (errno 18)
+```
+
+沙箱限制 pub 缓存的 rename，**带依赖的包一律装不上**（包括 `package:test`）。
+
+所以 `dart_core` 保持零依赖，测试用 `test/all_tests.dart`（纯 Dart 断言 + 退出码）。
 
 ---
 

@@ -383,15 +383,18 @@ test/widget/        关键页面渲染
 | 扩充黄金向量到 5–8 段 | ⬜ |
 | 冻结模型版本（记录 MD5） | ⬜ |
 
-### P1 · Dart 核心（1 周）— 🟡 70%
+### P1 · Dart 核心（1 周）— ✅ 完成
 
 | 任务 | 状态 |
 |---|---|
 | 移植 `counter.dart` | ✅ |
-| 移植 `posture.dart` | ⬜ |
+| 移植 `posture.dart` | ✅ |
 | 黄金向量验证脚本 | ✅ |
-| `package:test` 单元测试 | ⬜ |
-| 按时间窗口改造 | ⬜ 依赖 P0 |
+| 单元测试（无第三方依赖，`test/all_tests.dart`） | ✅ 14 项全绿 |
+| 按时间窗口改造 | ✅ |
+
+> `package:test` 在本机装不上（沙箱禁止 pub 缓存的跨设备 rename），
+> 改用纯 Dart 断言 runner，语义等价。
 
 ### P2 · Android 原生桥 + 离线 video（2 周）
 
