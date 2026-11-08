@@ -17,7 +17,7 @@ class CameraPoseSource implements PoseSource {
     final ok = await landmarker.startCamera(front: front);
     if (!ok) {
       front = !front; // 失败则回滚
-      rethrow;
+      throw StateError('切换摄像头失败');
     }
   }
 
