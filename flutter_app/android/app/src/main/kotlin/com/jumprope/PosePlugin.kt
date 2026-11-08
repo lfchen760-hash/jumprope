@@ -65,6 +65,11 @@ class PosePlugin :
 
         surfaceProducer = binding.textureRegistry.createSurfaceProducer()
 
+        binding.platformViewRegistry.registerViewFactory(
+            "jumprope/preview",
+            PreviewViewFactory(),
+        )
+
         channel = MethodChannel(binding.binaryMessenger, "com.jumprope/pose").also {
             it.setMethodCallHandler(this)
         }
@@ -167,6 +172,7 @@ class PosePlugin :
                         owner,
                         processor!!,
                         surfaceProducer,
+                        PreviewViewFactory.current,
                         { ts, lm -> emit(ts, lm) },
                         { jpeg -> main.post { previewSink?.success(jpeg) } },
                     )

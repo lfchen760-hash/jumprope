@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:jumprope_core/jumprope_core.dart';
 
 import 'data/pose/camera_pose_source.dart';
@@ -44,8 +45,6 @@ class _HomePageState extends State<HomePage> {
   int _textureId = -1;
   bool _cameraStarted = false;
   int _previewReq = -1;
-  Uint8List? _jpeg;
-  StreamSubscription<Uint8List>? _previewSub;
 
   bool get _active =>
       _state.phase == SessionPhase.running ||
@@ -74,9 +73,6 @@ class _HomePageState extends State<HomePage> {
         if (mounted) setState(() => _state = s);
       });
 
-      _previewSub = _landmarker.previewFrames.listen((bytes) {
-        if (mounted) setState(() => _jpeg = bytes);
-      });
 
       await controller.start();
       _cameraStarted = true;
@@ -100,8 +96,6 @@ class _HomePageState extends State<HomePage> {
   Future<void> _stop() async {
     await _sub?.cancel();
     _sub = null;
-    await _previewSub?.cancel();
-    _previewSub = null;
     await _controller?.stop();
     _controller = null;
     if (mounted) setState(() => _state = SessionState.idle);
@@ -110,7 +104,6 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _sub?.cancel();
-    _previewSub?.cancel();
     _controller?.dispose();
     _landmarker.dispose();
     super.dispose();
@@ -140,16 +133,12 @@ class _HomePageState extends State<HomePage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 预览：原生推过来的 JPEG 小图（纹理方案在当前环境不可用）
-          Positioned.fill(
-            child: _jpeg == null
-                ? const ColoredBox(color: Color(0xFF0B1020))
-                : Image.memory(
-                    _jpeg!,
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                    filterQuality: FilterQuality.low,
-                  ),
+          // 相机预览：原生 PreviewView（PlatformView，不依赖纹理/Impeller）
+          const Positioned.fill(
+            child: AndroidView(
+              viewType: 'jumprope/preview',
+              creationParamsCodec: StandardMessageCodec(),
+            ),
           ),
 
           // 顶部渐变压暗，保证文字可读

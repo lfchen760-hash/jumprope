@@ -29,6 +29,7 @@ class CameraStreamHandler(
     private val lifecycleOwner: LifecycleOwner,
     private val processor: PoseProcessor,
     private val surfaceProducer: TextureRegistry.SurfaceProducer?,
+    private val previewView: JumpropePreviewView?,
     private val onFrame: (timestampMs: Long, landmarks: FloatArray?) -> Unit,
     private val onPreviewJpeg: (ByteArray) -> Unit,
 ) {
@@ -73,7 +74,12 @@ class CameraStreamHandler(
 
         val preview = Preview.Builder().build()
         val producer = surfaceProducer
-        if (producer != null) {
+
+        // 优先用 PlatformView 的 SurfaceProvider（已知可用路径）
+        val pv = previewView?.previewView
+        if (pv != null) {
+            preview.setSurfaceProvider(pv.surfaceProvider)
+        } else if (producer != null) {
             preview.setSurfaceProvider { request ->
                 previewRequests++
                 // SurfaceProducer 由它自己管理 Surface 生命周期，不要手动 release
@@ -97,7 +103,7 @@ class CameraStreamHandler(
 
         return try {
             provider.unbindAll()
-            if (producer != null) {
+            if (pv != null || producer != null) {
                 provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
             } else {
                 provider.bindToLifecycle(lifecycleOwner, selector, analysis)
