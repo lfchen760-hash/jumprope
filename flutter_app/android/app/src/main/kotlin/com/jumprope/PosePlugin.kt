@@ -151,6 +151,16 @@ class PosePlugin :
                 result.success(ok)
             }
 
+            "getPreviewDebug" -> {
+                val c = camera
+                result.success(
+                    "pv=${PreviewViewFactory.createdCount}" +
+                        " b=${if (c?.previewBound == true) 1 else 0}" +
+                        " a=${if (c?.previewAttached == true) 1 else 0}" +
+                        " t=${c?.previewAttempts ?: -1}",
+                )
+            }
+
             "getPreviewRequests" -> {
                 result.success(camera?.previewRequests ?: -1)
             }

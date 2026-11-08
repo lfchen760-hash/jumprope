@@ -45,6 +45,7 @@ class _HomePageState extends State<HomePage> {
   int _textureId = -1;
   bool _cameraStarted = false;
   int _previewReq = -1;
+  String _previewDebug = '-';
 
   bool get _active =>
       _state.phase == SessionPhase.running ||
@@ -81,7 +82,13 @@ class _HomePageState extends State<HomePage> {
       // 稍等一下再读预览请求次数，判断 SurfaceProvider 有没有被调用
       Future.delayed(const Duration(milliseconds: 1500), () async {
         final n = await _landmarker.getPreviewRequests();
-        if (mounted) setState(() => _previewReq = n);
+        final d = await _landmarker.getPreviewDebug();
+        if (mounted) {
+          setState(() {
+            _previewReq = n;
+            _previewDebug = d;
+          });
+        }
       });
     } catch (e) {
       if (mounted) {
@@ -176,7 +183,7 @@ class _HomePageState extends State<HomePage> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    'v$kBuildId tex=$_textureId cam=${_cameraStarted ? 1 : 0} req=$_previewReq',
+                    'v$kBuildId ${_previewDebug.isEmpty ? '' : _previewDebug}',
                     style: TextStyle(
                       fontSize: 11,
                       fontFamily: 'monospace',

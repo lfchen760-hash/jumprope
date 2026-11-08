@@ -29,11 +29,17 @@ class PreviewViewFactory : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
         /** 当前活动的预览 View，CameraStreamHandler 用它拿 SurfaceProvider */
         @Volatile
         var current: JumpropePreviewView? = null
+
+        /** 平台视图被创建过几次（诊断用） */
+        @Volatile
+        var createdCount: Int = 0
+            private set
     }
 
     override fun create(context: Context, viewId: Int, args: Any?): PlatformView {
         val v = JumpropePreviewView(context)
         current = v
+        createdCount++
         return v
     }
 }

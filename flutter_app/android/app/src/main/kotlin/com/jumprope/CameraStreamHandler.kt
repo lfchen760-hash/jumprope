@@ -29,7 +29,7 @@ class CameraStreamHandler(
     private val lifecycleOwner: LifecycleOwner,
     private val processor: PoseProcessor,
     private val surfaceProducer: TextureRegistry.SurfaceProducer?,
-    private val previewView: JumpropePreviewView?,
+    private val previewProvider: () -> JumpropePreviewView?,
     private val onFrame: (timestampMs: Long, landmarks: FloatArray?) -> Unit,
     private val onPreviewJpeg: (ByteArray) -> Unit,
 ) {
@@ -45,6 +45,18 @@ class CameraStreamHandler(
     /** 预览请求次数，用于排查"纹理拿到但没画面" */
     @Volatile
     var previewRequests: Int = 0
+        private set
+
+    @Volatile
+    var previewBound: Boolean = false
+        private set
+
+    @Volatile
+    var previewAttached: Boolean = false
+        private set
+
+    @Volatile
+    var previewAttempts: Int = 0
         private set
 
     @Volatile
@@ -75,18 +87,26 @@ class CameraStreamHandler(
         val preview = Preview.Builder().build()
         val producer = surfaceProducer
 
-        // 优先用 PlatformView 的 SurfaceProvider（已知可用路径）
-        val pv = previewView?.previewView
-        if (pv != null) {
-            preview.setSurfaceProvider(pv.surfaceProvider)
-        } else if (producer != null) {
-            preview.setSurfaceProvider { request ->
-                previewRequests++
-                // SurfaceProducer 由它自己管理 Surface 生命周期，不要手动 release
-                producer.setSize(request.resolution.width, request.resolution.height)
-                request.provideSurface(producer.surface, executor) { _ -> }
+        // 平台视图是懒创建的，绑定预览时要动态取，取不到就稍后重试
+        fun bindPreview(retry: Int) {
+            previewAttempts++
+            val pv = previewProvider()?.previewView
+            if (pv == null) {
+                if (retry > 0) {
+                    android.os.Handler(android.os.Looper.getMainLooper())
+                        .postDelayed({ bindPreview(retry - 1) }, 300)
+                }
+                return
             }
+            preview.setSurfaceProvider(pv.surfaceProvider)
+            previewBound = true
+            previewAttached = pv.isAttachedToWindow
+            // 稍后再确认一次是否已挂到窗口
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                previewAttached = pv.isAttachedToWindow
+            }, 800)
         }
+        bindPreview(8)
 
         val analysis = ImageAnalysis.Builder()
             .setTargetResolution(Size(640, 480))
@@ -103,7 +123,7 @@ class CameraStreamHandler(
 
         return try {
             provider.unbindAll()
-            if (pv != null || producer != null) {
+            if (true) {
                 provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
             } else {
                 provider.bindToLifecycle(lifecycleOwner, selector, analysis)
