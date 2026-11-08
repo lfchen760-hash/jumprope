@@ -56,6 +56,10 @@ class MediaPipeLandmarker {
   Future<int> getPreviewTextureId() async =>
       await _method.invokeMethod<int>('getPreviewTextureId') ?? -1;
 
+  /// 预览请求次数（诊断用），-1 表示相机未创建
+  Future<int> getPreviewRequests() async =>
+      await _method.invokeMethod<int>('getPreviewRequests') ?? -1;
+
   Future<bool> startCamera({bool front = true}) async =>
       await _method.invokeMethod<bool>('startCamera', {'front': front}) ?? false;
 

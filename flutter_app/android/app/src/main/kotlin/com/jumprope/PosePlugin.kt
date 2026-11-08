@@ -49,7 +49,7 @@ class PosePlugin :
 
     private var processor: PoseProcessor? = null
     private var camera: CameraStreamHandler? = null
-    private var textureEntry: TextureRegistry.SurfaceTextureEntry? = null
+    private var surfaceProducer: TextureRegistry.SurfaceProducer? = null
 
     private val main = Handler(Looper.getMainLooper())
     private val videoExecutor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -61,7 +61,7 @@ class PosePlugin :
         context = binding.applicationContext
         processor = PoseProcessor(context)
 
-        textureEntry = binding.textureRegistry.createSurfaceTexture()
+        surfaceProducer = binding.textureRegistry.createSurfaceProducer()
 
         channel = MethodChannel(binding.binaryMessenger, "com.jumprope/pose").also {
             it.setMethodCallHandler(this)
@@ -80,8 +80,8 @@ class PosePlugin :
         camera = null
         processor?.close()
         processor = null
-        textureEntry?.release()
-        textureEntry = null
+        surfaceProducer?.release()
+        surfaceProducer = null
     }
 
     // ---------------- ActivityAware ----------------
@@ -130,8 +130,12 @@ class PosePlugin :
                 result.success(ok)
             }
 
+            "getPreviewRequests" -> {
+                result.success(camera?.previewRequests ?: -1)
+            }
+
             "getPreviewTextureId" -> {
-                result.success(textureEntry?.id() ?: -1)
+                result.success(surfaceProducer?.id() ?: -1)
             }
 
             "startCamera" -> {
@@ -146,7 +150,7 @@ class PosePlugin :
                         context,
                         owner,
                         processor!!,
-                        textureEntry?.surfaceTexture(),
+                        surfaceProducer,
                     ) { ts, lm -> emit(ts, lm) }
                 }
                 result.success(camera?.start(front) ?: false)

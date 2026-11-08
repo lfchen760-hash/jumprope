@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.view.Surface
+import io.flutter.view.TextureRegistry
 import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -26,7 +27,7 @@ class CameraStreamHandler(
     private val context: Context,
     private val lifecycleOwner: LifecycleOwner,
     private val processor: PoseProcessor,
-    private val previewTexture: SurfaceTexture?,
+    private val surfaceProducer: TextureRegistry.SurfaceProducer?,
     private val onFrame: (timestampMs: Long, landmarks: FloatArray?) -> Unit,
 ) {
     companion object {
@@ -37,6 +38,11 @@ class CameraStreamHandler(
     private var cameraProvider: ProcessCameraProvider? = null
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val busy = AtomicBoolean(false)
+
+    /** 预览请求次数，用于排查"纹理拿到但没画面" */
+    @Volatile
+    var previewRequests: Int = 0
+        private set
     private var running = false
 
     fun start(frontCamera: Boolean = true): Boolean {
@@ -45,14 +51,13 @@ class CameraStreamHandler(
         cameraProvider = provider
 
         val preview = Preview.Builder().build()
-        if (previewTexture != null) {
+        val producer = surfaceProducer
+        if (producer != null) {
             preview.setSurfaceProvider { request ->
-                previewTexture.setDefaultBufferSize(
-                    request.resolution.width,
-                    request.resolution.height,
-                )
-                val surf = Surface(previewTexture)
-                request.provideSurface(surf, executor) { _ -> surf.release() }
+                previewRequests++
+                // SurfaceProducer 由它自己管理 Surface 生命周期，不要手动 release
+                producer.setSize(request.resolution.width, request.resolution.height)
+                request.provideSurface(producer.surface, executor) { _ -> }
             }
         }
 
@@ -71,7 +76,7 @@ class CameraStreamHandler(
 
         return try {
             provider.unbindAll()
-            if (previewTexture != null) {
+            if (producer != null) {
                 provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
             } else {
                 provider.bindToLifecycle(lifecycleOwner, selector, analysis)
