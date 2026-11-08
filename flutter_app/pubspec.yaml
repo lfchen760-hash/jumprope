@@ -23,7 +23,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  # 模型不入库（5.6MB）。接入时先放好再取消注释：
-  #   mkdir -p assets && cp ../jumprope/public/models/pose_landmarker_lite.task assets/
-  # assets:
-  #   - assets/pose_landmarker_lite.task
+  # 模型不入库（5.6MB），由 CI 下载到 assets/ 后再打包
+  assets:
+    - assets/pose_landmarker_lite.task

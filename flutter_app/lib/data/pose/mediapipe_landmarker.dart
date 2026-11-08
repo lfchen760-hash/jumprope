@@ -25,6 +25,9 @@ class MediaPipeLandmarker {
       'useGpu': useGpu,
     });
     _initialized = ok ?? false;
+    if (!_initialized) {
+      throw StateError('MediaPipe 模型加载失败（assets 里找不到 $modelAsset？）');
+    }
     return _initialized;
   }
 

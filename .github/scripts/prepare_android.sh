@@ -150,6 +150,18 @@ if [ -f "$WRAPPER" ]; then
   fi
 fi
 
+# ── 4.5 校验模型资源已声明并存在 ──────────────────────
+echo "==> 4.5 校验姿态模型"
+if ! grep -q "pose_landmarker_lite.task" "$APP_DIR/pubspec.yaml"; then
+  echo "❌ pubspec 未声明模型资源，MediaPipe 会加载失败"
+  exit 1
+fi
+if [ ! -f "$APP_DIR/assets/pose_landmarker_lite.task" ]; then
+  echo "❌ assets/pose_landmarker_lite.task 不存在"
+  exit 1
+fi
+echo "   模型已声明且存在: $(du -h "$APP_DIR/assets/pose_landmarker_lite.task" | cut -f1)"
+
 # ── 5. 打印结果，方便在日志里核对 ─────────────────────
 echo "==> 5/5 校验"
 echo "--- dependencies 片段 ---"
