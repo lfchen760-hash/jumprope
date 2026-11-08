@@ -47,6 +47,22 @@ if 'android.permission.CAMERA' not in s:
 PY
 grep -q "android.permission.CAMERA" "$MANIFEST" || { echo "权限写入失败"; exit 1; }
 
+# ── 2.5 关闭 Impeller（Texture 组件在黑屏问题修复前不可用）──
+echo "==> 2.5 关闭 Impeller"
+python3 - "$MANIFEST" <<'PYMSG'
+import sys, re
+p = sys.argv[1]
+s = open(p, encoding='utf-8').read()
+if 'EnableImpeller' not in s:
+    meta = ('        <meta-data\n'
+            '            android:name="io.flutter.embedding.android.EnableImpeller"\n'
+            '            android:value="false" />\n')
+    # 插到 <application ...> 之后
+    s = re.sub(r'(<application[^>]*>\n?)', lambda m: m.group(1) + meta, s, count=1)
+    open(p, 'w', encoding='utf-8').write(s)
+PYMSG
+grep -q "EnableImpeller" "$MANIFEST" || { echo "Impeller 开关写入失败"; exit 1; }
+
 # ── 3. 依赖与 minSdk ──────────────────────────────────
 echo "==> 3/4 注入依赖与 minSdk"
 python3 - "$GRADLE_FILE" <<'PY'
