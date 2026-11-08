@@ -1,0 +1,39 @@
+// Gradle 全局初始化脚本：把所有仓库换成国内镜像。
+// GitHub 的 Release CDN 一挂，Maven Central 的部分构件会 302 到 GitHub 导致 504。
+// 走阿里云镜像可以彻底避开。
+
+def MIRRORS = [
+    'https://maven.aliyun.com/repository/google',
+    'https://maven.aliyun.com/repository/public',
+    'https://maven.aliyun.com/repository/gradle-plugin',
+]
+
+def applyMirrors = { repoHandler ->
+    try {
+        repoHandler.clear()
+        MIRRORS.each { u ->
+            repoHandler.maven { url = u }
+        }
+        repoHandler.mavenLocal()
+    } catch (Exception e) {
+        println "[init.gradle] 跳过一处仓库替换: ${e.message}"
+    }
+}
+
+settingsEvaluated { settings ->
+    try {
+        applyMirrors(settings.pluginManagement.repositories)
+    } catch (Exception e) {
+        println "[init.gradle] pluginManagement 不支持: ${e.message}"
+    }
+    try {
+        applyMirrors(settings.dependencyResolutionManagement.repositories)
+    } catch (Exception e) {
+        println "[init.gradle] dependencyResolutionManagement 不支持: ${e.message}"
+    }
+}
+
+allprojects { project ->
+    applyMirrors(project.buildscript.repositories)
+    applyMirrors(project.repositories)
+}

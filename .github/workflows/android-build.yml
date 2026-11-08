@@ -71,6 +71,13 @@ jobs:
       - name: 注册插件 + 权限 + 依赖
         run: bash .github/scripts/prepare_android.sh ci_app
 
+      - name: 安装 Gradle 镜像配置
+        run: |
+          mkdir -p ~/.gradle
+          cp .github/scripts/init.gradle ~/.gradle/init.gradle
+          echo "已安装 init.gradle："
+          head -5 ~/.gradle/init.gradle
+
       - name: 解析依赖
         working-directory: ci_app
         run: flutter pub get
