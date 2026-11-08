@@ -8,6 +8,7 @@ import 'package:jumprope_core/jumprope_core.dart';
 import 'camera_test_page.dart';
 import 'data/pose/camera_pose_source.dart';
 import 'skeleton_painter.dart';
+import 'voice_service.dart';
 import 'data/pose/mediapipe_landmarker.dart';
 
 /// 构建标识，CI 用 --dart-define=BUILD_ID=xxxx 注入
@@ -61,6 +62,8 @@ class _HomePageState extends State<HomePage> {
   CameraPoseSource? _source;
   StreamSubscription<PoseFrame>? _lmSub;
   final ValueNotifier<PoseFrame?> _poseVN = ValueNotifier(null);
+  final VoiceService _voice = VoiceService();
+  Timer? _countdownTimer;
   StreamSubscription<SessionState>? _sub;
 
   SessionState _state = SessionState.idle;
@@ -78,6 +81,47 @@ class _HomePageState extends State<HomePage> {
       _state.phase == SessionPhase.positioning ||
       _state.phase == SessionPhase.countdown ||
       _state.phase == SessionPhase.paused;
+
+  /// 语音编排：相位切换、倒数、取景提示、报数
+  void _onState(SessionState s) {
+    final prev = _state.phase;
+
+    if (s.phase != prev) {
+      _countdownTimer?.cancel();
+      if (s.phase == SessionPhase.countdown) {
+        _voice.say('准备');
+        var n = 3;
+        _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+          if (!mounted || _state.phase != SessionPhase.countdown) {
+            t.cancel();
+            return;
+          }
+          if (n > 0) {
+            _voice.say('$n');
+            n--;
+          } else {
+            t.cancel();
+          }
+        });
+      } else if (s.phase == SessionPhase.running) {
+        _voice.resetCount();
+        _voice.say('开始');
+      } else if (s.phase == SessionPhase.paused) {
+        _voice.say('已暂停');
+      } else if (s.phase == SessionPhase.finished) {
+        _voice.say('时间到，共 ${s.count} 次');
+      }
+    }
+
+    if (s.phase == SessionPhase.positioning && !s.framing.ok) {
+      _voice.sayOnce(s.framing.message);
+    }
+    if (s.phase == SessionPhase.running) {
+      _voice.announceCount(s.count);
+    }
+
+    if (mounted) setState(() => _state = s);
+  }
 
   Future<void> _loadDiag() async {
     final native = await _landmarker.getDiagnostics();
@@ -101,6 +145,7 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
+      await _voice.init();
       await _landmarker.init();
       _textureId = await _landmarker.getPreviewTextureId();
 
@@ -114,9 +159,7 @@ class _HomePageState extends State<HomePage> {
       );
       _controller = controller;
 
-      _sub = controller.state.listen((s) {
-        if (mounted) setState(() => _state = s);
-      });
+      _sub = controller.state.listen(_onState);
 
       // 骨架叠加用：单独订阅关键点
       _lmSub = _landmarker.frames.listen((f) {
@@ -192,6 +235,8 @@ class _HomePageState extends State<HomePage> {
     await _lmSub?.cancel();
     _lmSub = null;
     _poseVN.value = null;
+    _countdownTimer?.cancel();
+    await _voice.stop();
     await _controller?.stop();
     _controller = null;
     if (mounted) setState(() => _state = SessionState.idle);
@@ -202,6 +247,8 @@ class _HomePageState extends State<HomePage> {
     _sub?.cancel();
     _lmSub?.cancel();
     _poseVN.dispose();
+    _countdownTimer?.cancel();
+    _voice.dispose();
     _controller?.dispose();
     _landmarker.dispose();
     super.dispose();
@@ -408,16 +455,39 @@ class _HomePageState extends State<HomePage> {
                                   ),
                               ],
                             ),
-                            const SizedBox(height: 10),
-                            TextButton(
-                              onPressed: () async {
-                                await _loadDiag();
-                                setState(() => _showDiag = !_showDiag);
-                              },
-                              child: Text(
-                                _showDiag ? '收起诊断' : '诊断信息',
-                                style: const TextStyle(fontSize: 13),
-                              ),
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                TextButton(
+                                  onPressed: () {
+                                    setState(() => _voice.enabled = !_voice.enabled);
+                                    if (!_voice.enabled) _voice.stop();
+                                  },
+                                  child: Text(
+                                    '语音：${_voice.enabled ? "开" : "关"}',
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () async {
+                                    await _voice.init();
+                                    await _voice.say('测试语音');
+                                  },
+                                  child: const Text('试听',
+                                      style: TextStyle(fontSize: 13)),
+                                ),
+                                TextButton(
+                                  onPressed: () async {
+                                    await _loadDiag();
+                                    setState(() => _showDiag = !_showDiag);
+                                  },
+                                  child: Text(
+                                    _showDiag ? '收起诊断' : '诊断信息',
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 8),
                             SizedBox(
