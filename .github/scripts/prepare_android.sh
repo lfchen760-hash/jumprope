@@ -20,14 +20,40 @@ mkdir -p "$PKG_DIR"
 cat > "$MAIN_KT" <<'KT'
 package com.jumprope.jumprope_app
 
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
 import com.jumprope.PosePlugin
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterView
+import io.flutter.embedding.android.RenderMode
 import io.flutter.embedding.engine.FlutterEngine
 
 class MainActivity : FlutterActivity() {
+    // 用 TextureView 渲染，才能把 Flutter 画面透明地叠在原生预览上
+    override fun getRenderMode(): RenderMode = RenderMode.texture
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         flutterEngine.plugins.add(PosePlugin())
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
+        makeFlutterTransparent(findViewById(android.R.id.content))
+    }
+
+    private fun makeFlutterTransparent(v: View) {
+        if (v is FlutterView) {
+            v.setBackgroundColor(Color.TRANSPARENT)
+            return
+        }
+        if (v is ViewGroup) {
+            for (i in 0 until v.childCount) makeFlutterTransparent(v.getChildAt(i))
+        }
     }
 }
 KT

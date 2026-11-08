@@ -1,9 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:jumprope_core/jumprope_core.dart';
@@ -24,7 +21,10 @@ class JumpropeApp extends StatelessWidget {
     return MaterialApp(
       title: '跳绳计数',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(useMaterial3: true),
+      theme: ThemeData.dark(useMaterial3: true).copyWith(
+        scaffoldBackgroundColor: Colors.transparent,
+        canvasColor: Colors.transparent,
+      ),
       home: const HomePage(),
     );
   }
@@ -139,38 +139,10 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.transparent,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 相机预览：原生 PreviewView，用 Hybrid Composition 真正插入视图树。
-          // 虚拟显示器（VirtualDisplay）模式下 PreviewView 渲染为黑屏。
-          Positioned.fill(
-            child: PlatformViewLink(
-              viewType: 'jumprope/preview',
-              surfaceFactory: (context, controller) {
-                return AndroidViewSurface(
-                  controller: controller as AndroidViewController,
-                  gestureRecognizers:
-                      const <Factory<OneSequenceGestureRecognizer>>{},
-                  hitTestBehavior: PlatformViewHitTestBehavior.transparent,
-                );
-              },
-              onCreatePlatformView: (params) {
-                return PlatformViewsService.initExpensiveAndroidView(
-                  id: params.id,
-                  viewType: 'jumprope/preview',
-                  layoutDirection: TextDirection.ltr,
-                  creationParams: const <String, dynamic>{},
-                  creationParamsCodec: const StandardMessageCodec(),
-                  onFocus: () => params.onFocusChanged(true),
-                )
-                  ..addOnPlatformViewCreatedListener(params.onPlatformViewCreated)
-                  ..create();
-              },
-            ),
-          ),
-
           // 顶部渐变压暗，保证文字可读
           Positioned(
             top: 0,

@@ -65,10 +65,6 @@ class PosePlugin :
 
         surfaceProducer = binding.textureRegistry.createSurfaceProducer()
 
-        binding.platformViewRegistry.registerViewFactory(
-            "jumprope/preview",
-            PreviewViewFactory(),
-        )
 
         channel = MethodChannel(binding.binaryMessenger, "com.jumprope/pose").also {
             it.setMethodCallHandler(this)
@@ -109,6 +105,9 @@ class PosePlugin :
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
+        // 预览视图直接挂到窗口最底层，不经过 Flutter 渲染管线
+        runCatching { PreviewHolder.attach(binding.activity) }
+            .onFailure { android.util.Log.e("PosePlugin", "attach preview failed", it) }
     }
 
     override fun onDetachedFromActivityForConfigChanges() {
@@ -120,6 +119,7 @@ class PosePlugin :
     }
 
     override fun onDetachedFromActivity() {
+        PreviewHolder.detach()
         activity = null
     }
 
@@ -154,7 +154,7 @@ class PosePlugin :
             "getPreviewDebug" -> {
                 val c = camera
                 result.success(
-                    "pv=${PreviewViewFactory.createdCount}" +
+                    "pv=${if (PreviewHolder.view != null) 1 else 0}" +
                         " b=${if (c?.previewBound == true) 1 else 0}" +
                         " a=${if (c?.previewAttached == true) 1 else 0}" +
                         " t=${c?.previewAttempts ?: -1}",
@@ -182,7 +182,7 @@ class PosePlugin :
                         owner,
                         processor!!,
                         surfaceProducer,
-                        { PreviewViewFactory.current },
+                        { PreviewHolder.view },
                         { ts, lm -> emit(ts, lm) },
                         { jpeg -> main.post { previewSink?.success(jpeg) } },
                     )

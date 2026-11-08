@@ -6,6 +6,7 @@ import android.graphics.Matrix
 import java.io.ByteArrayOutputStream
 import android.graphics.SurfaceTexture
 import android.view.Surface
+import androidx.camera.view.PreviewView
 import io.flutter.view.TextureRegistry
 import android.util.Size
 import androidx.camera.core.CameraSelector
@@ -29,7 +30,7 @@ class CameraStreamHandler(
     private val lifecycleOwner: LifecycleOwner,
     private val processor: PoseProcessor,
     private val surfaceProducer: TextureRegistry.SurfaceProducer?,
-    private val previewProvider: () -> JumpropePreviewView?,
+    private val previewProvider: () -> PreviewView?,
     private val onFrame: (timestampMs: Long, landmarks: FloatArray?) -> Unit,
     private val onPreviewJpeg: (ByteArray) -> Unit,
 ) {
@@ -90,7 +91,7 @@ class CameraStreamHandler(
         // 平台视图是懒创建的，绑定预览时要动态取，取不到就稍后重试
         fun bindPreview(retry: Int) {
             previewAttempts++
-            val pv = previewProvider()?.previewView
+            val pv = previewProvider()
             if (pv == null) {
                 if (retry > 0) {
                     android.os.Handler(android.os.Looper.getMainLooper())
