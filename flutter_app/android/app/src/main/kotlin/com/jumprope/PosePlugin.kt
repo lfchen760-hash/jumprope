@@ -182,7 +182,7 @@ class PosePlugin :
                         owner,
                         processor!!,
                         surfaceProducer,
-                        PreviewViewFactory.current,
+                        { PreviewViewFactory.current },
                         { ts, lm -> emit(ts, lm) },
                         { jpeg -> main.post { previewSink?.success(jpeg) } },
                     )
