@@ -150,17 +150,22 @@ if [ -f "$WRAPPER" ]; then
   fi
 fi
 
-# ── 4.5 校验模型资源已声明并存在 ──────────────────────
-echo "==> 4.5 校验姿态模型"
-if ! grep -q "pose_landmarker_lite.task" "$APP_DIR/pubspec.yaml"; then
-  echo "❌ pubspec 未声明模型资源，MediaPipe 会加载失败"
+# ── 4.5 模型放到 Android 原生 assets ──────────────────
+# Flutter 会把资源打包到 assets/flutter_assets/ 下，
+# 而 MediaPipe 的 setModelAssetPath 读的是 Android assets 根目录，
+# 所以必须另外复制一份到 android/app/src/main/assets/
+echo "==> 4.5 放置姿态模型"
+SRC_MODEL="$(ls "$APP_DIR"/assets/*.task 2>/dev/null | head -1 || true)"
+if [ -z "$SRC_MODEL" ]; then
+  echo "❌ 没找到模型文件（$APP_DIR/assets/*.task）"
   exit 1
 fi
-if [ ! -f "$APP_DIR/assets/pose_landmarker_lite.task" ]; then
-  echo "❌ assets/pose_landmarker_lite.task 不存在"
-  exit 1
-fi
-echo "   模型已声明且存在: $(du -h "$APP_DIR/assets/pose_landmarker_lite.task" | cut -f1)"
+mkdir -p "$APP_DIR/android/app/src/main/assets"
+cp "$SRC_MODEL" "$APP_DIR/android/app/src/main/assets/"
+MODEL_NAME="$(basename "$SRC_MODEL")"
+[ -f "$APP_DIR/android/app/src/main/assets/$MODEL_NAME" ] || {
+  echo "❌ 模型复制失败"; exit 1; }
+echo "   已放入 Android assets: $MODEL_NAME ($(du -h "$SRC_MODEL" | cut -f1))"
 
 # ── 5. 打印结果，方便在日志里核对 ─────────────────────
 echo "==> 5/5 校验"

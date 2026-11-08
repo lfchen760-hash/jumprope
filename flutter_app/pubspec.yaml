@@ -23,6 +23,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  # 模型不入库（5.6MB），由 CI 下载到 assets/ 后再打包
-  assets:
-    - assets/pose_landmarker_lite.task
+  # 模型不入库（5.6MB）。CI 下载后由 prepare_android.sh 复制到
+  # android/app/src/main/assets/，MediaPipe 从 Android assets 读取。
