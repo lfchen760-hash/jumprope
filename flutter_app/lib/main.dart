@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:jumprope_core/jumprope_core.dart';
@@ -140,11 +141,31 @@ class _HomePageState extends State<HomePage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 相机预览：原生 PreviewView（PlatformView，不依赖纹理/Impeller）
-          const Positioned.fill(
-            child: AndroidView(
+          // 相机预览：原生 PreviewView，用 Hybrid Composition 真正插入视图树。
+          // 虚拟显示器（VirtualDisplay）模式下 PreviewView 渲染为黑屏。
+          Positioned.fill(
+            child: PlatformViewLink(
               viewType: 'jumprope/preview',
-              creationParamsCodec: StandardMessageCodec(),
+              surfaceFactory: (context, controller) {
+                return AndroidViewSurface(
+                  controller: controller as AndroidViewController,
+                  gestureRecognizers:
+                      const <Factory<OneSequenceGestureRecognizer>>{},
+                  hitTestBehavior: PlatformViewHitTestBehavior.transparent,
+                );
+              },
+              onCreatePlatformView: (params) {
+                return PlatformViewsService.initExpensiveAndroidView(
+                  id: params.id,
+                  viewType: 'jumprope/preview',
+                  layoutDirection: TextDirection.ltr,
+                  creationParams: const <String, dynamic>{},
+                  creationParamsCodec: const StandardMessageCodec(),
+                  onFocus: () => params.onFocusChanged(true),
+                )
+                  ..addOnPlatformViewCreatedListener(params.onPlatformViewCreated)
+                  ..create();
+              },
             ),
           ),
 
