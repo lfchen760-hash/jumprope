@@ -25,6 +25,7 @@ const MIME = {
   '.task': 'application/octet-stream',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
+  '.apk': 'application/vnd.android.package-archive',
   '.ico': 'image/x-icon',
 };
 

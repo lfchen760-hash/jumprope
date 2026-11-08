@@ -1,101 +1,74 @@
 /**
- * 从 GitHub Release 自动同步 APK 到本机下载目录。
+ * 从仓库的 apk 分支同步 APK 到本机下载目录。
  *
- * 为什么用 Release：Release 资产是公开可下载的，
- * 服务器不需要任何 token 或 secret。
+ * 为什么走 git 而不是 Release：
+ *   GitHub 的 Release 下载通道（objects.githubusercontent.com）经常 504，
+ *   而 git 通道一直可用。CI 会把构建产物推到 apk 分支。
  *
- *   node sync-apk.mjs          # 常驻轮询
+ *   node sync-apk.mjs          # 常驻轮询（每 5 分钟）
  *   node sync-apk.mjs --once   # 只检查一次
  */
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-const REPO = 'lfchen760-hash/jumprope';
-const TAG = 'debug-latest';
+const REPO_DIR = '/root/dsh/test/repo';
+const BRANCH = 'apk';
 const OUT_DIR = path.join(__dirname, 'public', 'download');
-const OUT_FILE = path.join(OUT_DIR, 'jumprope-debug.apk');
+const OUT_FILE = path.join(OUT_DIR, 'jumprope.apk');
 const STATE_FILE = path.join(__dirname, '.apk_sync_state.json');
 const INTERVAL_MS = 5 * 60 * 1000;
 
-function log(...a) {
-  console.log(new Date().toISOString().slice(11, 19), ...a);
-}
+const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
+
+const git = (args, opts = {}) =>
+  execFileSync('git', ['-C', REPO_DIR, ...args], {
+    encoding: 'buffer',
+    maxBuffer: 512 * 1024 * 1024,
+    env: { ...process.env, GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND || '' },
+    ...opts,
+  });
 
 function readState() {
-  try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-  } catch {
-    return {};
-  }
+  try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { return {}; }
 }
-
-function writeState(s) {
-  fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2));
-}
-
-async function fetchRelease() {
-  const url = `https://api.github.com/repos/${REPO}/releases/tags/${TAG}`;
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'jumprope-sync', Accept: 'application/vnd.github+json' },
-  });
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    log(`查询 Release 失败: HTTP ${res.status}`);
-    return null;
-  }
-  return res.json();
-}
-
-async function download(url, dest) {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'jumprope-sync' },
-    redirect: 'follow',
-  });
-  if (!res.ok) throw new Error(`下载失败 HTTP ${res.status}`);
-
-  const tmp = dest + '.part';
-  const buf = Buffer.from(await res.arrayBuffer());
-  fs.writeFileSync(tmp, buf);
-  fs.renameSync(tmp, dest);
-  return buf.length;
-}
+const writeState = (s) => fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2));
 
 async function checkOnce() {
-  let rel;
   try {
-    rel = await fetchRelease();
+    git(['fetch', '-q', 'origin', BRANCH]);
   } catch (e) {
-    log('网络错误:', e.message);
-    return false;
-  }
-  if (!rel) {
-    log('还没有 debug-latest Release');
+    log('git fetch 失败:', e.message.split('\n')[0]);
     return false;
   }
 
-  const asset = (rel.assets || []).find((a) => a.name.endsWith('.apk'));
-  if (!asset) {
-    log('Release 里没有 .apk 资产');
+  let blob;
+  try {
+    blob = git(['rev-parse', `origin/${BRANCH}:jumprope.apk`]).toString().trim();
+  } catch {
+    log('apk 分支里没有 jumprope.apk');
     return false;
   }
 
   const state = readState();
-  if (state.assetId === asset.id) {
-    log(`已是最新 (${asset.name}, ${(asset.size / 1048576).toFixed(1)}MB)`);
+  if (state.blob === blob && fs.existsSync(OUT_FILE)) {
+    log(`已是最新 (${(fs.statSync(OUT_FILE).size / 1048576).toFixed(1)}MB)`);
     return false;
   }
 
-  log(`发现新版本 ${asset.updated_at}，开始下载 ${(asset.size / 1048576).toFixed(1)}MB…`);
+  log('发现新构建，导出中…');
   try {
-    const n = await download(asset.browser_download_url, OUT_FILE);
-    writeState({ assetId: asset.id, updatedAt: asset.updated_at, size: n, syncedAt: Date.now() });
-    log(`完成 → ${OUT_FILE}  ${(n / 1048576).toFixed(1)}MB`);
+    const buf = git(['cat-file', '-p', `origin/${BRANCH}:jumprope.apk`]);
+    const tmp = OUT_FILE + '.part';
+    fs.writeFileSync(tmp, buf);
+    fs.renameSync(tmp, OUT_FILE);
+    writeState({ blob, size: buf.length, syncedAt: Date.now() });
+    log(`完成 → ${OUT_FILE}  ${(buf.length / 1048576).toFixed(1)}MB`);
     return true;
   } catch (e) {
-    log('下载失败:', e.message);
+    log('导出失败:', e.message.split('\n')[0]);
     return false;
   }
 }
@@ -107,6 +80,6 @@ if (process.argv.includes('--once')) {
   process.exit(0);
 }
 
-log('开始轮询 GitHub Release（每 5 分钟）');
+log('开始轮询 apk 分支（每 5 分钟）');
 await checkOnce();
 setInterval(checkOnce, INTERVAL_MS);
