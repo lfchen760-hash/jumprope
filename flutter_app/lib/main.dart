@@ -7,6 +7,7 @@ import 'package:jumprope_core/jumprope_core.dart';
 
 import 'camera_test_page.dart';
 import 'data/pose/camera_pose_source.dart';
+import 'skeleton_painter.dart';
 import 'data/pose/mediapipe_landmarker.dart';
 
 /// 构建标识，CI 用 --dart-define=BUILD_ID=xxxx 注入
@@ -58,6 +59,8 @@ class _HomePageState extends State<HomePage> {
 
   SessionController? _controller;
   CameraPoseSource? _source;
+  StreamSubscription<PoseFrame>? _lmSub;
+  final ValueNotifier<PoseFrame?> _poseVN = ValueNotifier(null);
   StreamSubscription<SessionState>? _sub;
 
   SessionState _state = SessionState.idle;
@@ -96,6 +99,11 @@ class _HomePageState extends State<HomePage> {
 
       _sub = controller.state.listen((s) {
         if (mounted) setState(() => _state = s);
+      });
+
+      // 骨架叠加用：单独订阅关键点
+      _lmSub = _landmarker.frames.listen((f) {
+        _poseVN.value = f.hasPose ? f : null;
       });
 
 
@@ -162,6 +170,9 @@ class _HomePageState extends State<HomePage> {
   Future<void> _stop() async {
     await _sub?.cancel();
     _sub = null;
+    await _lmSub?.cancel();
+    _lmSub = null;
+    _poseVN.value = null;
     await _controller?.stop();
     _controller = null;
     if (mounted) setState(() => _state = SessionState.idle);
@@ -170,6 +181,8 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _sub?.cancel();
+    _lmSub?.cancel();
+    _poseVN.dispose();
     _controller?.dispose();
     _landmarker.dispose();
     super.dispose();
@@ -199,6 +212,24 @@ class _HomePageState extends State<HomePage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
+          // 骨架叠加
+          Positioned.fill(
+            child: IgnorePointer(
+              child: ValueListenableBuilder<PoseFrame?>(
+                valueListenable: _poseVN,
+                builder: (_, frame, __) {
+                  final lms = frame?.landmarks ?? const <Landmark>[];
+                  return CustomPaint(
+                    painter: SkeletonPainter(
+                      lms,
+                      mirrored: _source?.front ?? true,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+
           // 顶部渐变压暗，保证文字可读
           Positioned(
             top: 0,
