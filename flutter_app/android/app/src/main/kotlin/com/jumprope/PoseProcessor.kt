@@ -19,6 +19,10 @@ class PoseProcessor(private val context: Context) {
     private var landmarker: PoseLandmarker? = null
     private var lastTimestamp = 0L
 
+    /** 最近一次初始化失败的原因（回传到界面显示） */
+    var lastError: String = ""
+        private set
+
     /** 返回 33*4 的扁平数组 [x, y, z, visibility] × 33；无人时返回 null */
     fun detect(bitmap: Bitmap, timestampMs: Long): FloatArray? {
         val lm = landmarker ?: return null
@@ -72,16 +76,23 @@ class PoseProcessor(private val context: Context) {
             return PoseLandmarker.createFromOptions(context, opts)
         }
 
-        landmarker = try {
-            if (useGpu) build(Delegate.GPU) else build(Delegate.CPU)
-        } catch (e: Exception) {
+        lastError = ""
+        if (useGpu) {
             try {
-                build(Delegate.CPU)
-            } catch (e2: Exception) {
-                null
+                landmarker = build(Delegate.GPU)
+                return true
+            } catch (e: Throwable) {
+                lastError = "GPU失败: ${e.javaClass.simpleName}: ${e.message}\n"
             }
         }
-        return landmarker != null
+        try {
+            landmarker = build(Delegate.CPU)
+            return true
+        } catch (e: Throwable) {
+            lastError += "CPU失败: ${e.javaClass.simpleName}: ${e.message}"
+            landmarker = null
+            return false
+        }
     }
 
     fun close() {

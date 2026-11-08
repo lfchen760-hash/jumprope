@@ -26,7 +26,8 @@ class MediaPipeLandmarker {
     });
     _initialized = ok ?? false;
     if (!_initialized) {
-      throw StateError('MediaPipe 模型加载失败（assets 里找不到 $modelAsset？）');
+      final detail = await _method.invokeMethod<String>('getInitError') ?? '';
+      throw StateError('MediaPipe 初始化失败\n$detail');
     }
     return _initialized;
   }

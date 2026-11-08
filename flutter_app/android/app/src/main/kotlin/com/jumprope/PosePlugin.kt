@@ -144,8 +144,20 @@ class PosePlugin :
             "init" -> {
                 val asset = call.argument<String>("modelAsset") ?: "pose_landmarker_lite.task"
                 val gpu = call.argument<Boolean>("useGpu") ?: true
-                val ok = processor?.init(asset, gpu) ?: false
+                val p = processor
+                if (p == null) {
+                    result.success(false)
+                    return
+                }
+                val ok = p.init(asset, gpu)
+                if (!ok) {
+                    android.util.Log.e("PosePlugin", "init failed: ${p.lastError}")
+                }
                 result.success(ok)
+            }
+
+            "getInitError" -> {
+                result.success(processor?.lastError ?: "")
             }
 
             "getPreviewDebug" -> {
