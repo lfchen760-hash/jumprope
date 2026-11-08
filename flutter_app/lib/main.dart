@@ -41,6 +41,7 @@ class _HomePageState extends State<HomePage> {
   final _landmarker = MediaPipeLandmarker();
 
   SessionController? _controller;
+  CameraPoseSource? _source;
   StreamSubscription<SessionState>? _sub;
 
   SessionState _state = SessionState.idle;
@@ -66,8 +67,11 @@ class _HomePageState extends State<HomePage> {
       await _landmarker.init();
       _textureId = await _landmarker.getPreviewTextureId();
 
+      final source = CameraPoseSource(_landmarker);
+      _source = source;
+
       final controller = SessionController(
-        source: CameraPoseSource(_landmarker),
+        source: source,
         durationSec: 60,
         countdownSec: 3,
       );
@@ -81,6 +85,12 @@ class _HomePageState extends State<HomePage> {
       await controller.start();
       _cameraStarted = true;
       if (mounted) setState(() {});
+
+      // 帧数持续刷新，肉眼可见相机有没有输出
+      Timer.periodic(const Duration(milliseconds: 500), (t) {
+        if (!mounted || !_active) return t.cancel();
+        setState(() {});
+      });
 
       // 稍等一下再读预览请求次数，判断 SurfaceProvider 有没有被调用
       Future.delayed(const Duration(milliseconds: 1500), () async {
@@ -178,7 +188,8 @@ class _HomePageState extends State<HomePage> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    'v$kBuildId ${_previewDebug.isEmpty ? '' : _previewDebug}',
+                    'v$kBuildId ${_previewDebug.isEmpty ? '' : _previewDebug} '
+                    'f=${_source?.frameCount ?? 0} p=${_source?.poseCount ?? 0}',
                     style: TextStyle(
                       fontSize: 11,
                       fontFamily: 'monospace',
@@ -217,6 +228,10 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(height: 8),
                 _pill(_phaseText, warn: _active && !_state.framing.ok),
 
+                if (_active && (_source?.frameCount ?? 0) == 0) ...[
+                  const SizedBox(height: 8),
+                  _pill('相机没有输出画面（权限或初始化失败）', warn: true),
+                ],
                 if (_state.gate != 'ok') ...[
                   const SizedBox(height: 8),
                   _pill(

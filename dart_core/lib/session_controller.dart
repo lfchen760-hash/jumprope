@@ -33,7 +33,8 @@ class SessionController {
   double _pausedRemain = 0;
 
   int _remainingMs = 0;
-  Framing _framing = Framing.ready;
+  // 初始必须是「未就位」：一帧都没收到时不能显示「就位了」
+  Framing _framing = const Framing(false, '等待画面…');
   String _gate = 'ok';
   bool _hasPose = false;
 

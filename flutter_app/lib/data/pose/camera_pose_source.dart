@@ -10,8 +10,18 @@ class CameraPoseSource implements PoseSource {
 
   CameraPoseSource(this.landmarker, {this.front = true});
 
+  /// 已收到的帧数（用于判断相机到底有没有输出）
+  int frameCount = 0;
+
+  /// 收到过有姿态的帧数
+  int poseCount = 0;
+
   @override
-  Stream<PoseFrame> get frames => landmarker.frames;
+  Stream<PoseFrame> get frames => landmarker.frames.map((f) {
+        frameCount++;
+        if (f.hasPose) poseCount++;
+        return f;
+      });
 
   @override
   SourceKind get kind => SourceKind.camera;
