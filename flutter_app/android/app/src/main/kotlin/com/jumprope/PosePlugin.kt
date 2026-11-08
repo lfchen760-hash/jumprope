@@ -46,6 +46,8 @@ class PosePlugin :
     private var channel: MethodChannel? = null
     private var eventChannel: EventChannel? = null
     private var sink: EventChannel.EventSink? = null
+    private var previewChannel: EventChannel? = null
+    private var previewSink: EventChannel.EventSink? = null
 
     private var processor: PoseProcessor? = null
     private var camera: CameraStreamHandler? = null
@@ -69,11 +71,25 @@ class PosePlugin :
         eventChannel = EventChannel(binding.binaryMessenger, "com.jumprope/pose_frames").also {
             it.setStreamHandler(this)
         }
+        previewChannel = EventChannel(binding.binaryMessenger, "com.jumprope/preview").also {
+            it.setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    previewSink = events
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    previewSink = null
+                }
+            })
+        }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel?.setMethodCallHandler(null)
         eventChannel?.setStreamHandler(null)
+        previewChannel?.setStreamHandler(null)
+        previewChannel = null
+        previewSink = null
         channel = null
         eventChannel = null
         camera?.dispose()
@@ -151,7 +167,9 @@ class PosePlugin :
                         owner,
                         processor!!,
                         surfaceProducer,
-                    ) { ts, lm -> emit(ts, lm) }
+                        { ts, lm -> emit(ts, lm) },
+                        { jpeg -> main.post { previewSink?.success(jpeg) } },
+                    )
                 }
                 result.success(camera?.start(front) ?: false)
             }

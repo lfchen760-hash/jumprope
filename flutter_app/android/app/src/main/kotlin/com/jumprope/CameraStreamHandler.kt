@@ -3,6 +3,7 @@ package com.jumprope
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import java.io.ByteArrayOutputStream
 import android.graphics.SurfaceTexture
 import android.view.Surface
 import io.flutter.view.TextureRegistry
@@ -29,6 +30,7 @@ class CameraStreamHandler(
     private val processor: PoseProcessor,
     private val surfaceProducer: TextureRegistry.SurfaceProducer?,
     private val onFrame: (timestampMs: Long, landmarks: FloatArray?) -> Unit,
+    private val onPreviewJpeg: (ByteArray) -> Unit,
 ) {
     companion object {
         /** 检测时长边上限，与 Web 版保持一致 */
@@ -43,6 +45,25 @@ class CameraStreamHandler(
     @Volatile
     var previewRequests: Int = 0
         private set
+
+    @Volatile
+    private var lastPreviewMs = 0L
+
+    /** 预览降采样：宽度 360，约 8fps，够对准手机即可 */
+    private fun emitPreview(bitmap: Bitmap, ts: Long) {
+        if (ts - lastPreviewMs < 120) return
+        lastPreviewMs = ts
+        try {
+            val w = 360
+            val h = (bitmap.height * w / bitmap.width.toFloat()).toInt().coerceAtLeast(1)
+            val small = Bitmap.createScaledBitmap(bitmap, w, h, true)
+            val out = ByteArrayOutputStream()
+            small.compress(Bitmap.CompressFormat.JPEG, 55, out)
+            if (small !== bitmap) small.recycle()
+            onPreviewJpeg(out.toByteArray())
+        } catch (_: Exception) {
+        }
+    }
     private var running = false
 
     fun start(frontCamera: Boolean = true): Boolean {
@@ -115,6 +136,7 @@ class CameraStreamHandler(
             }
 
             val scaled = scaleToLongSide(bitmap, LONG_SIDE)
+            emitPreview(scaled, ts)
             val landmarks = if (scaled.width > 0) processor.detect(scaled, ts) else null
             if (scaled !== bitmap) scaled.recycle()
 

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/services.dart';
 import 'package:jumprope_core/landmark.dart';
 import 'package:jumprope_core/pose_frame.dart';
@@ -8,6 +10,7 @@ import 'package:jumprope_core/pose_frame.dart';
 class MediaPipeLandmarker {
   static const MethodChannel _method = MethodChannel('com.jumprope/pose');
   static const EventChannel _event = EventChannel('com.jumprope/pose_frames');
+  static const EventChannel _preview = EventChannel('com.jumprope/preview');
 
   bool _initialized = false;
 
@@ -28,6 +31,12 @@ class MediaPipeLandmarker {
   /// 关键点流。每个事件是一帧：[PoseFrame]，无人时 landmarks 为空。
   Stream<PoseFrame> get frames =>
       _event.receiveBroadcastStream().map(_parse).where((f) => f != null).cast<PoseFrame>();
+
+  /// 预览小图流（JPEG，约 8fps），用于手机端对准镜头
+  Stream<Uint8List> get previewFrames => _preview
+      .receiveBroadcastStream()
+      .where((e) => e is Uint8List)
+      .cast<Uint8List>();
 
   PoseFrame? _parse(dynamic event) {
     if (event is! Map) return null;
