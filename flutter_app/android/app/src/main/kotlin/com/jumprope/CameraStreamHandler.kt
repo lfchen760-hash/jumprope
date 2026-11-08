@@ -3,10 +3,13 @@ package com.jumprope
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.graphics.SurfaceTexture
+import android.view.Surface
 import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
+import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
@@ -23,6 +26,7 @@ class CameraStreamHandler(
     private val context: Context,
     private val lifecycleOwner: LifecycleOwner,
     private val processor: PoseProcessor,
+    private val previewTexture: SurfaceTexture?,
     private val onFrame: (timestampMs: Long, landmarks: FloatArray?) -> Unit,
 ) {
     companion object {
@@ -40,6 +44,18 @@ class CameraStreamHandler(
         val provider = ProcessCameraProvider.getInstance(context).get()
         cameraProvider = provider
 
+        val preview = Preview.Builder().build()
+        if (previewTexture != null) {
+            preview.setSurfaceProvider { request ->
+                previewTexture.setDefaultBufferSize(
+                    request.resolution.width,
+                    request.resolution.height,
+                )
+                val surf = Surface(previewTexture)
+                request.provideSurface(surf, executor) { _ -> surf.release() }
+            }
+        }
+
         val analysis = ImageAnalysis.Builder()
             .setTargetResolution(Size(640, 480))
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -55,7 +71,11 @@ class CameraStreamHandler(
 
         return try {
             provider.unbindAll()
-            provider.bindToLifecycle(lifecycleOwner, selector, analysis)
+            if (previewTexture != null) {
+                provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
+            } else {
+                provider.bindToLifecycle(lifecycleOwner, selector, analysis)
+            }
             running = true
             true
         } catch (e: Exception) {

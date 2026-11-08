@@ -52,6 +52,10 @@ class MediaPipeLandmarker {
     return PoseFrame(t, lm);
   }
 
+  /// 相机预览纹理 id（给 Flutter 的 Texture 组件用），-1 表示不可用
+  Future<int> getPreviewTextureId() async =>
+      await _method.invokeMethod<int>('getPreviewTextureId') ?? -1;
+
   Future<bool> startCamera({bool front = true}) async =>
       await _method.invokeMethod<bool>('startCamera', {'front': front}) ?? false;
 

@@ -7,6 +7,7 @@ import android.media.MediaMetadataRetriever
 import android.os.Handler
 import android.os.Looper
 import androidx.lifecycle.LifecycleOwner
+import io.flutter.view.TextureRegistry
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
@@ -48,6 +49,7 @@ class PosePlugin :
 
     private var processor: PoseProcessor? = null
     private var camera: CameraStreamHandler? = null
+    private var textureEntry: TextureRegistry.SurfaceTextureEntry? = null
 
     private val main = Handler(Looper.getMainLooper())
     private val videoExecutor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -58,6 +60,8 @@ class PosePlugin :
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
         processor = PoseProcessor(context)
+
+        textureEntry = binding.textureRegistry.createSurfaceTexture()
 
         channel = MethodChannel(binding.binaryMessenger, "com.jumprope/pose").also {
             it.setMethodCallHandler(this)
@@ -76,6 +80,8 @@ class PosePlugin :
         camera = null
         processor?.close()
         processor = null
+        textureEntry?.release()
+        textureEntry = null
     }
 
     // ---------------- ActivityAware ----------------
@@ -124,6 +130,10 @@ class PosePlugin :
                 result.success(ok)
             }
 
+            "getPreviewTextureId" -> {
+                result.success(textureEntry?.id() ?: -1)
+            }
+
             "startCamera" -> {
                 val front = call.argument<Boolean>("front") ?: true
                 val owner = activity as? LifecycleOwner
@@ -132,9 +142,12 @@ class PosePlugin :
                     return
                 }
                 if (camera == null) {
-                    camera = CameraStreamHandler(context, owner, processor!!) { ts, lm ->
-                        emit(ts, lm)
-                    }
+                    camera = CameraStreamHandler(
+                        context,
+                        owner,
+                        processor!!,
+                        textureEntry?.surfaceTexture(),
+                    ) { ts, lm -> emit(ts, lm) }
                 }
                 result.success(camera?.start(front) ?: false)
             }
