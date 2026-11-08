@@ -149,7 +149,8 @@ jobs:
           git push -f origin apk
           echo "已推送分支 apk"
 
-      - name: 发布到 Release（供服务器自动拉取）
+      - name: 发布到 Release（可选，失败不影响主流程）
+        continue-on-error: true
         if: ${{ (github.event_name == 'push' || inputs.build_apk) && success() }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
