@@ -37,6 +37,18 @@ object PreviewHolder {
         return pv
     }
 
+    /**
+     * 确保预览视图真的挂在窗口上。
+     *
+     * 不能在 onAttachedToActivity 里挂：那时 FlutterActivity 还没 setContentView，
+     * 随后会被整体替换掉，视图就变成"存在但不在窗口里"的孤儿（isAttachedToWindow=false）。
+     */
+    fun ensureAttached(activity: Activity): PreviewView {
+        val existing = view
+        if (existing != null && existing.isAttachedToWindow) return existing
+        return attach(activity)
+    }
+
     fun detach() {
         val v = view ?: return
         (v.parent as? ViewGroup)?.removeView(v)

@@ -105,9 +105,6 @@ class PosePlugin :
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
-        // 预览视图直接挂到窗口最底层，不经过 Flutter 渲染管线
-        runCatching { PreviewHolder.attach(binding.activity) }
-            .onFailure { android.util.Log.e("PosePlugin", "attach preview failed", it) }
     }
 
     override fun onDetachedFromActivityForConfigChanges() {
@@ -171,11 +168,15 @@ class PosePlugin :
 
             "startCamera" -> {
                 val front = call.argument<Boolean>("front") ?: true
-                val owner = activity as? LifecycleOwner
-                if (owner == null || processor == null) {
+                val act = activity
+                val owner = act as? LifecycleOwner
+                if (act == null || owner == null || processor == null) {
                     result.success(false)
                     return
                 }
+                // 此时 Activity 已 setContentView，挂上去才不会被替换掉
+                runCatching { PreviewHolder.ensureAttached(act) }
+                    .onFailure { android.util.Log.e("PosePlugin", "attach preview failed", it) }
                 if (camera == null) {
                     camera = CameraStreamHandler(
                         context,

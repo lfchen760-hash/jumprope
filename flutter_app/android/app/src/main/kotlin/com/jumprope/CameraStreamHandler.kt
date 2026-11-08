@@ -92,7 +92,7 @@ class CameraStreamHandler(
         fun bindPreview(retry: Int) {
             previewAttempts++
             val pv = previewProvider()
-            if (pv == null) {
+            if (pv == null || !pv.isAttachedToWindow) {
                 if (retry > 0) {
                     android.os.Handler(android.os.Looper.getMainLooper())
                         .postDelayed({ bindPreview(retry - 1) }, 300)
