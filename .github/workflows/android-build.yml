@@ -130,6 +130,25 @@ jobs:
           path: ci_app/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 7
 
+      - name: 推 APK 到 apk 分支（绕开 Release 下载通道）
+        if: ${{ (github.event_name == 'push' || inputs.build_apk) && success() }}
+        run: |
+          APK=ci_app/build/app/outputs/flutter-apk/app-release.apk
+          ls -lh "$APK"
+          mkdir -p /tmp/apkout && cp "$APK" /tmp/apkout/jumprope.apk
+          sha256sum /tmp/apkout/jumprope.apk | tee /tmp/apkout/jumprope.apk.sha256
+
+          git config user.name "ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          git checkout --orphan apk 2>/dev/null || git checkout -B apk
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          rm -rf ci_app ci-logs flutter_app dart_core jumprope docs .github 2>/dev/null || true
+          cp /tmp/apkout/jumprope.apk /tmp/apkout/jumprope.apk.sha256 .
+          git add -f jumprope.apk jumprope.apk.sha256
+          git commit -m "apk: build ${GITHUB_SHA::7} [skip ci]"
+          git push -f origin apk
+          echo "已推送分支 apk"
+
       - name: 发布到 Release（供服务器自动拉取）
         if: ${{ (github.event_name == 'push' || inputs.build_apk) && success() }}
         env:
