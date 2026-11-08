@@ -65,6 +65,7 @@ class _HomePageState extends State<HomePage> {
   int _textureId = -1;
   bool _cameraStarted = false;
   int _previewReq = -1;
+  int _durationSec = 60;
   String _previewDebug = '-';
 
   bool get _active =>
@@ -88,7 +89,7 @@ class _HomePageState extends State<HomePage> {
 
       final controller = SessionController(
         source: source,
-        durationSec: 60,
+        durationSec: _durationSec,
         countdownSec: 3,
       );
       _controller = controller;
@@ -126,6 +127,35 @@ class _HomePageState extends State<HomePage> {
           _state = SessionState.idle;
         });
       }
+    }
+  }
+
+  /// 暂停 / 继续
+  Future<void> _togglePause() async {
+    final c = _controller;
+    if (c == null) return;
+    if (_state.phase == SessionPhase.paused) {
+      c.resume();
+    } else if (_state.phase == SessionPhase.running) {
+      c.pause();
+    }
+  }
+
+  /// 重置：结束当前会话后重新开始（沿用当前时长）
+  Future<void> _reset() async {
+    final sec = _durationSec;
+    await _stop();
+    _durationSec = sec;
+    await _start();
+  }
+
+  /// 前后摄像头切换
+  Future<void> _flip() async {
+    try {
+      await _source?.flip();
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) setState(() => _error = '切换摄像头失败: $e');
     }
   }
 
@@ -272,27 +302,93 @@ class _HomePageState extends State<HomePage> {
                 ],
                 const Spacer(),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 22),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _active ? _stop : _start,
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        backgroundColor:
-                            _active ? Colors.white24 : Colors.blueAccent,
-                      ),
-                      child: Text(
-                        _active ? '停止' : '开始',
-                        style: const TextStyle(fontSize: 18),
-                      ),
-                    ),
-                  ),
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 18),
+                  child: _active
+                      ? Row(
+                          children: [
+                            Expanded(
+                              child: _ctrlBtn(
+                                _state.phase == SessionPhase.paused ? '继续' : '暂停',
+                                _togglePause,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(child: _ctrlBtn('重置', _reset)),
+                            const SizedBox(width: 8),
+                            Expanded(child: _ctrlBtn('翻转', _flip)),
+                            const SizedBox(width: 8),
+                            Expanded(child: _ctrlBtn('结束', _stop, primary: true)),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                for (final s in const [30, 60, 120, 180])
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    child: _chip(
+                                      s < 60 ? '$s秒' : '${s ~/ 60}分钟',
+                                      _durationSec == s,
+                                      () => setState(() => _durationSec = s),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton(
+                                onPressed: _start,
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  backgroundColor: Colors.blueAccent,
+                                ),
+                                child: const Text('开始',
+                                    style: TextStyle(fontSize: 18)),
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _ctrlBtn(String label, VoidCallback onTap, {bool primary = false}) {
+    return SizedBox(
+      height: 52,
+      child: FilledButton(
+        onPressed: onTap,
+        style: FilledButton.styleFrom(
+          padding: EdgeInsets.zero,
+          backgroundColor:
+              primary ? Colors.blueAccent : Colors.white.withValues(alpha: 0.14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        child: Text(label, style: const TextStyle(fontSize: 15)),
+      ),
+    );
+  }
+
+  Widget _chip(String label, bool selected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? Colors.blueAccent : Colors.white.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected ? Colors.blueAccent : Colors.white24,
+          ),
+        ),
+        child: Text(label, style: const TextStyle(fontSize: 14)),
       ),
     );
   }

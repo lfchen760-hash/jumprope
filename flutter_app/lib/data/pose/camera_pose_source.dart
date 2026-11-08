@@ -6,9 +6,20 @@ import 'mediapipe_landmarker.dart';
 /// 实时相机数据源。（触发 CI 编译验证 · 3）
 class CameraPoseSource implements PoseSource {
   final MediaPipeLandmarker landmarker;
-  final bool front;
+  bool front;
 
   CameraPoseSource(this.landmarker, {this.front = true});
+
+  /// 前后摄像头切换：解绑后按新的朝向重新绑定
+  Future<void> flip() async {
+    front = !front;
+    await landmarker.stopCamera();
+    final ok = await landmarker.startCamera(front: front);
+    if (!ok) {
+      front = !front; // 失败则回滚
+      rethrow;
+    }
+  }
 
   /// 已收到的帧数（用于判断相机到底有没有输出）
   int frameCount = 0;
