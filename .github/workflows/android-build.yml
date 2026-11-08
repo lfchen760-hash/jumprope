@@ -124,8 +124,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           APK=ci_app/build/app/outputs/flutter-apk/app-release.apk
-          cp "$APK" jumprope-debug.apk
-          ls -lh jumprope-debug.apk
+          cp "$APK" jumprope.apk
+          ls -lh jumprope.apk
 
           # Release 资产是公开可下载的，服务器无需任何凭证即可拉取
           gh release view debug-latest >/dev/null 2>&1 \
@@ -134,5 +134,7 @@ jobs:
                  --notes "自动构建产物，最新一次构建会覆盖" \
                  --prerelease
 
-          gh release upload debug-latest jumprope-debug.apk --clobber
+          # 清掉旧的 debug 资产，避免混淆
+          gh release delete-asset debug-latest jumprope-debug.apk -y 2>/dev/null || true
+          gh release upload debug-latest jumprope.apk --clobber
           echo "已发布: https://github.com/${GITHUB_REPOSITORY}/releases/tag/debug-latest"
