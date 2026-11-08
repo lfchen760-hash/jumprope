@@ -40,6 +40,11 @@ jobs:
           channel: stable
           cache: true
 
+      # 缓存 Gradle 发行包与依赖：既提速，也避免 GitHub 抖动时每次重下
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
       - name: 下载姿态模型
         run: |
           mkdir -p flutter_app/assets
