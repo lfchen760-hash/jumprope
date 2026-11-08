@@ -1,0 +1,5 @@
+name: jumprope_core
+description: 跳绳计数核心（纯 Dart，不依赖 Flutter），与 public/counter.mjs 保持逐行对应。
+version: 0.1.0
+environment:
+  sdk: ^3.0.0

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>跳绳计数 · 离线分析</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #0b1020; color: #e8ecff;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif; }
+  body { padding: 16px; padding-bottom: 40px; }
+  h1 { font-size: 19px; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { font-size: 13px; opacity: .55; margin-bottom: 16px; line-height: 1.6; }
+
+  #drop {
+    border: 2px dashed rgba(140,180,255,.28); border-radius: 16px;
+    padding: 34px 20px; text-align: center; cursor: pointer;
+    background: rgba(140,180,255,.04); transition: .2s;
+  }
+  #drop.hover { border-color: #4d8dff; background: rgba(77,141,255,.1); }
+  #drop .big { font-size: 15px; font-weight: 600; }
+  #drop .hint { font-size: 12px; opacity: .5; margin-top: 8px; }
+  input[type=file] { display: none; }
+
+  #main { display: none; margin-top: 16px; }
+  #main.on { display: block; }
+
+  .row { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+  #videoBox { position: relative; flex: 1 1 320px; max-width: 420px; }
+  #video { width: 100%; border-radius: 12px; background: #000; display: block; }
+  #overlay { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 12px; pointer-events: none; }
+
+  #side { flex: 1 1 260px; }
+  .stat { display: flex; justify-content: space-between; padding: 7px 0;
+    border-bottom: 1px solid rgba(140,180,255,.1); font-size: 14px; }
+  .stat .k { opacity: .55; }
+  .stat .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .bad { color: #ff8a8a; }
+  .warn { color: #ffcf6b; }
+  .good { color: #6ee7a8; }
+
+  #timelineWrap { margin-top: 16px; }
+  #timeline { width: 100%; height: 130px; display: block; border-radius: 10px;
+    background: rgba(8,12,26,.6); border: 1px solid rgba(140,180,255,.12); cursor: crosshair; }
+  #tlLegend { font-size: 11px; opacity: .5; margin-top: 6px; }
+
+  #controls { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button {
+    border: 0; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 600;
+    color: #fff; background: linear-gradient(180deg, #2f6dff, #1f4fd8); cursor: pointer;
+    font-family: inherit;
+  }
+  button.ghost { background: rgba(140,180,255,.12); color: #cddaff; border: 1px solid rgba(140,180,255,.18); }
+  button:disabled { opacity: .4; }
+
+  #progress { font-size: 13px; opacity: .7; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid rgba(140,180,255,.08); }
+  th { opacity: .5; font-weight: 500; font-size: 12px; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: rgba(140,180,255,.07); }
+  tbody tr.bad-row { background: rgba(255,90,90,.08); }
+  td.num { font-variant-numeric: tabular-nums; }
+
+  #report { margin-top: 16px; }
+  pre { background: rgba(8,12,26,.7); border: 1px solid rgba(140,180,255,.12);
+    border-radius: 10px; padding: 12px; font-size: 12px; line-height: 1.6;
+    white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: #1f4fd8; color: #fff; padding: 10px 20px; border-radius: 999px;
+    font-size: 13px; opacity: 0; transition: .25s; pointer-events: none; }
+  #toast.on { opacity: 1; }
+</style>
+</head>
+<body>
+<h1>跳绳计数 · 离线分析</h1>
+<div class="sub">
+  视频只在浏览器里处理，不会上传。选一个本地视频，跑完会标出<strong>疑似漏计的时间段</strong>，点一下就能看那一帧。
+</div>
+
+<div id="drop">
+  <div class="big">点击选择视频，或拖拽到这里</div>
+  <div class="hint">建议用手机原片，60 秒左右 · mp4 / mov<br>分析耗时大约等于视频本身长度</div>
+  <input type="file" id="file" accept="video/*">
+</div>
+
+<div id="main">
+  <div class="row">
+    <div id="videoBox">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay"></canvas>
+    </div>
+    <div id="side">
+      <div class="stat"><span class="k">计数</span><span class="v" id="sCount">—</span></div>
+      <div class="stat"><span class="k">时长</span><span class="v" id="sDur">—</span></div>
+      <div class="stat"><span class="k">平均频率</span><span class="v" id="sRate">—</span></div>
+      <div class="stat"><span class="k">中位间隔</span><span class="v" id="sMed">—</span></div>
+      <div class="stat"><span class="k">疑似漏计段</span><span class="v" id="sGap">—</span></div>
+      <div class="stat"><span class="k">当前时间</span><span class="v" id="sNow">0.00s</span></div>
+      <div class="stat"><span class="k">当前 lift / 振幅</span><span class="v" id="sSig">—</span></div>
+    </div>
+  </div>
+
+  <div id="timelineWrap">
+    <canvas id="timeline"></canvas>
+    <div id="tlLegend">蓝线 = 髋部起伏信号 · 黄点 = 计到的一次 · 红色区块 = 疑似漏计 · 点击任意位置跳转</div>
+  </div>
+
+  <div id="controls">
+    <button id="startBtn">开始分析</button>
+    <button id="copyBtn" class="ghost" disabled>复制问题清单</button>
+    <button id="jsonBtn" class="ghost" disabled>导出 JSON</button>
+    <span id="progress"></span>
+  </div>
+
+  <table id="table" hidden>
+    <thead>
+      <tr><th>#</th><th>时间</th><th>间隔</th><th>状态</th><th>操作</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <details id="diagBox" style="margin-top:18px">
+    <summary style="cursor:pointer;font-size:13px;opacity:.6">诊断信息（加载耗时 / 是否走缓存）</summary>
+    <pre id="diag" style="margin-top:10px">尚未运行</pre>
+  </details>
+
+  <div id="report" hidden>
+    <h3 style="font-size:14px;margin:18px 0 8px;">问题清单（可直接复制给我）</h3>
+    <pre id="reportText"></pre>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script type="module" src="./analyze.js"></script>
+</body>
+</html>

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0b1020">
+<title>跳绳 AI 计数</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #0b1020; color: #e8ecff;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+    -webkit-user-select: none; user-select: none;
+  }
+  #app { display: flex; flex-direction: column; height: 100%; height: 100dvh; }
+
+  /* ---------- 摄像头区 ---------- */
+  #stage {
+    position: relative; flex: 1 1 auto; min-height: 0;
+    background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  #camWrap { position: relative; width: 100%; height: 100%; }
+  #cam, #overlay {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; display: block;
+  }
+  .mirrored #cam, .mirrored #overlay { transform: scaleX(-1); }
+  #camWrap.dim #cam { opacity: .45; transition: opacity .25s; }
+  #cam { transition: opacity .25s; }
+
+  /* ---------- 计数 HUD ---------- */
+  #hud {
+    position: absolute; top: 0; left: 0; right: 0;
+    padding: calc(env(safe-area-inset-top, 0px) + 14px) 18px 0;
+    display: flex; align-items: flex-start; justify-content: space-between;
+    pointer-events: none; z-index: 5;
+  }
+  #countBox { text-align: left; }
+  #count {
+    font-size: clamp(64px, 19vw, 132px); font-weight: 800; line-height: .9;
+    letter-spacing: -0.04em;
+    background: linear-gradient(180deg, #ffffff 30%, #8fd4ff 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 4px 18px rgba(80,170,255,.45));
+    font-variant-numeric: tabular-nums;
+  }
+  #countLabel { font-size: 13px; opacity: .65; letter-spacing: .18em; margin-top: 4px; }
+
+  #metrics { text-align: right; display: flex; flex-direction: column; gap: 8px; }
+  .metric {
+    background: rgba(14,20,40,.55); backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(140,180,255,.16);
+    border-radius: 12px; padding: 6px 12px; min-width: 92px;
+  }
+  .metric .k { font-size: 10px; opacity: .55; letter-spacing: .12em; }
+  .metric .v { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  /* ---------- 状态提示 ---------- */
+  #status {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    background: rgba(10,16,32,.78); backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(140,180,255,.18); border-radius: 999px;
+    padding: 9px 18px; font-size: 14px; white-space: nowrap; max-width: 92%;
+    overflow: hidden; text-overflow: ellipsis; z-index: 6;
+    transition: opacity .25s;
+  }
+  #status.warn { color: #ffcf6b; border-color: rgba(255,207,107,.35); }
+
+  /* ---------- 波形 ---------- */
+  /* ---------- 取景引导 ---------- */
+  #guide {
+    position: absolute; inset: 0; z-index: 4; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; pointer-events: none;
+  }
+  #guide.on { display: flex; }
+  #guide .head {
+    width: 74px; height: 74px; border-radius: 50%;
+    border: 2px dashed rgba(150,205,255,.55);
+    margin-bottom: -6px;
+  }
+  #guide .body {
+    width: 190px; height: 300px;
+    border: 2px dashed rgba(150,205,255,.55);
+    border-radius: 90px 90px 70px 70px;
+  }
+  #guide .txt {
+    font-size: 15px; color: rgba(200,225,255,.85);
+    background: rgba(10,16,32,.6); padding: 8px 16px; border-radius: 999px;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+
+  /* ---------- 调试读数 ---------- */
+  #debug {
+    position: absolute; left: 14px; bottom: 126px; z-index: 5;
+    font-size: 11px; line-height: 1.55; white-space: pre;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: rgba(190,215,255,.6); pointer-events: none;
+    text-shadow: 0 1px 3px rgba(0,0,0,.8);
+  }
+
+  #waveWrap {
+    position: absolute; left: 12px; right: 12px; bottom: 58px; height: 62px;
+    border-radius: 12px; overflow: hidden; z-index: 4;
+    background: rgba(8,12,26,.42); border: 1px solid rgba(140,180,255,.12);
+    pointer-events: none;
+  }
+  #wave { width: 100%; height: 100%; display: block; }
+
+  /* ---------- 底部控制 ---------- */
+  #bar {
+    flex: 0 0 auto; display: flex; gap: 10px; align-items: center;
+    padding: 12px 14px calc(env(safe-area-inset-bottom, 0px) + 12px);
+    background: #0b1020; border-top: 1px solid rgba(140,180,255,.1);
+    z-index: 10;
+  }
+  button {
+    flex: 1; border: 0; border-radius: 14px; padding: 15px 10px;
+    font-size: 16px; font-weight: 700; color: #fff; cursor: pointer;
+    background: linear-gradient(180deg, #2f6dff, #1f4fd8);
+    box-shadow: 0 6px 18px rgba(47,109,255,.32);
+    transition: transform .12s, opacity .2s;
+    font-family: inherit;
+  }
+  button:active { transform: scale(.97); }
+  button.ghost {
+    flex: 0 0 auto; min-width: 74px; background: rgba(140,180,255,.12);
+    color: #cddaff; box-shadow: none; border: 1px solid rgba(140,180,255,.18);
+    font-size: 14px;
+  }
+  button:disabled { opacity: .45; }
+
+  /* ---------- 开始遮罩 ---------- */
+  #cover {
+    position: absolute; inset: 0; z-index: 30; display: flex;
+    flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background: radial-gradient(circle at 50% 35%, #1a2547 0%, #0b1020 70%);
+    text-align: center; padding: 28px;
+  }
+  #cover.hidden { display: none; }
+  #cover h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; }
+  #cover p { font-size: 14px; line-height: 1.7; opacity: .6; margin: 0; max-width: 340px; }
+  #cover .big {
+    flex: 0 0 auto;                 /* 关键：不要被纵向 flex 撑开 */
+    width: 168px; height: 168px; min-width: 168px; min-height: 168px;
+    border-radius: 50%; font-size: 21px; letter-spacing: .08em;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(160deg, #3d7bff, #1f4fd8);
+    box-shadow: 0 0 0 10px rgba(61,123,255,.1), 0 16px 46px rgba(47,109,255,.45);
+  }
+  #cover .big:disabled { opacity: .7; }
+  #cover .link {
+    flex: 0 0 auto;
+    background: none; box-shadow: none;
+    border: 1px dashed rgba(140,180,255,.3);
+    color: #9db8ff; font-size: 13px; font-weight: 500;
+    padding: 9px 18px; border-radius: 999px;
+  }
+  #soundHint { font-size: 12px; opacity: .55; max-width: 330px; line-height: 1.6; min-height: 1em; }
+  #modelHint { font-size: 13px; opacity: .6; min-height: 1.2em; }
+  #modelHint.ok { color: #6ee7a8; opacity: 1; }
+  #modelHint.bad { color: #ff8a8a; opacity: 1; }
+  #modelHint.loading { color: #9db8ff; }
+  #cover .tips { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  #cover .tip {
+    font-size: 12px; padding: 7px 12px; border-radius: 999px;
+    background: rgba(140,180,255,.08); border: 1px solid rgba(140,180,255,.14);
+    opacity: .8;
+  }
+  #err { color: #ff8a8a; font-size: 13px; max-width: 320px; line-height: 1.6; }
+  #err:empty { display: none; }
+
+  /* ---------- 时长选择 ---------- */
+  #durs { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  #durs button {
+    flex: 0 0 auto; padding: 8px 14px; font-size: 13px; font-weight: 600;
+    border-radius: 999px; background: rgba(140,180,255,.1);
+    color: #b9ccff; border: 1px solid rgba(140,180,255,.18); box-shadow: none;
+  }
+  #durs button.on {
+    background: linear-gradient(180deg, #2f6dff, #1f4fd8); color: #fff;
+    border-color: transparent; box-shadow: 0 4px 14px rgba(47,109,255,.35);
+  }
+
+  /* ---------- 倒数 ---------- */
+  #countdown {
+    position: absolute; inset: 0; z-index: 25; display: none;
+    align-items: center; justify-content: center; pointer-events: none;
+  }
+  #countdown.on { display: flex; }
+  #cdNum {
+    font-size: clamp(110px, 36vw, 240px); font-weight: 800; line-height: 1;
+    color: #fff; letter-spacing: -.04em;
+    text-shadow: 0 0 70px rgba(90,180,255,.9), 0 8px 40px rgba(0,0,0,.5);
+    animation: cdPop .95s cubic-bezier(.2,.9,.3,1);
+  }
+  @keyframes cdPop {
+    0% { transform: scale(.35); opacity: 0; }
+    35% { transform: scale(1.12); opacity: 1; }
+    100% { transform: scale(1); opacity: .92; }
+  }
+
+  /* ---------- 成绩 ---------- */
+  #result {
+    position: absolute; inset: 0; z-index: 30; display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    background: radial-gradient(circle at 50% 40%, rgba(16,30,64,.96), rgba(8,12,26,.98));
+    text-align: center; padding: 24px;
+  }
+  #result.on { display: flex; }
+  #result .rTitle { font-size: 15px; letter-spacing: .2em; opacity: .6; }
+  #result .rNum { font-size: clamp(76px, 24vw, 150px); font-weight: 800; line-height: 1;
+    background: linear-gradient(180deg,#fff 30%,#8fd4ff 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 6px 24px rgba(80,170,255,.5)); }
+  #result .rSub { font-size: 14px; opacity: .65; line-height: 1.8; }
+  #result button { flex: 0 0 auto; padding: 14px 34px; border-radius: 14px; }
+
+  /* 取景引导条 */
+  #poseHint {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    z-index: 8; display: none; pointer-events: none;
+    background: rgba(10,16,32,.82); border: 1px solid rgba(255,207,107,.35);
+    color: #ffcf6b; border-radius: 999px; padding: 12px 22px;
+    font-size: 15px; font-weight: 600; white-space: nowrap;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  }
+  #poseHint.on { display: block; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <div id="camWrap">
+      <video id="cam" playsinline autoplay muted></video>
+      <canvas id="overlay"></canvas>
+    </div>
+
+    <div id="hud">
+      <div id="countBox">
+        <div id="count">0</div>
+        <div id="countLabel">次</div>
+      </div>
+      <div id="metrics">
+        <div class="metric"><div class="k">时长</div><div class="v" id="timer">0:00</div></div>
+        <div class="metric"><div class="k">频率/分</div><div class="v" id="rate">0</div></div>
+      </div>
+    </div>
+
+    <div id="guide">
+      <div class="head"></div>
+      <div class="body"></div>
+      <div class="txt">把全身放进这个框里</div>
+    </div>
+
+    <div id="debug"></div>
+    <div id="waveWrap"><canvas id="wave"></canvas></div>
+    <div id="poseHint"></div>
+    <div id="countdown"><span id="cdNum">3</span></div>
+    <div id="result">
+      <div class="rTitle">时间到</div>
+      <div class="rNum"><span id="rNum">0</span></div>
+      <div class="rSub" id="rSub"></div>
+      <button id="againBtn">再跳一次</button>
+    </div>
+    <div id="status">准备中…</div>
+
+    <div id="cover">
+      <h1>跳绳 AI 计数</h1>
+      <p>把手机架好，让孩子的全身进入画面。<br>站着别动 2 秒完成标定，然后开始跳。</p>
+      <button id="startBtn" class="big">开始</button>
+      <div id="durs">
+        <button data-sec="30">30秒</button>
+        <button data-sec="60" class="on">1分钟</button>
+        <button data-sec="120">2分钟</button>
+        <button data-sec="180">3分钟</button>
+      </div>
+      <button id="soundTest" class="link">🔊 点这里测试声音</button>
+      <div id="soundHint"></div>
+      <div class="tips">
+        <span class="tip">全身入镜</span>
+        <span class="tip">距离 1.5–3m</span>
+        <span class="tip">光线充足</span>
+        <span class="tip">画面中一人</span>
+      </div>
+      <div id="modelHint"></div>
+      <div id="err"></div>
+    </div>
+  </div>
+
+  <div id="bar">
+    <button id="toggleBtn" disabled>暂停</button>
+    <button id="resetBtn" class="ghost">重置</button>
+    <button id="voiceBtn" class="ghost">语音·10</button>
+    <button id="flipBtn" class="ghost">翻转</button>
+  </div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

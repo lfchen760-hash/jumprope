@@ -1,0 +1,24 @@
+# 依赖
+node_modules/
+.pylibs/
+.dart_tool/
+.pub-cache/
+.npm-cache/
+.pw-browsers/
+.syslibs/
+.debs/
+.dart/
+.mpl/
+.tmp/
+
+# 大文件（运行时下载，不入库）
+jumprope/public/models/*.task
+jumprope/public/wasm/*.wasm
+jumprope/public/download/
+
+# 日志与产物
+*.log
+*.apk
+*.zip
+build/
+.DS_Store
