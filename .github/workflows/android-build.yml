@@ -69,12 +69,12 @@ jobs:
         run: flutter analyze || true
 
       - name: 构建 APK
-        if: ${{ inputs.build_apk }}
+        if: ${{ github.event_name == 'push' || inputs.build_apk }}
         working-directory: ci_app
         run: flutter build apk --debug
 
       - name: 上传 APK
-        if: ${{ inputs.build_apk && success() }}
+        if: ${{ (github.event_name == 'push' || inputs.build_apk) && success() }}
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
