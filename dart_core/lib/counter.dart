@@ -12,10 +12,11 @@ class CounterConfig {
   final double baseAlpha;   // 慢速基线跟随速度
   final double ampMin;      // 振幅下限
   final double promK;       // 峰确认回落比例
-  final int win;            // 振幅统计窗口（帧）
-  final int lag;            // 滞后帧数
-  final int fastWin;        // 快速振幅窗口
-  final int xWin;           // 横向位移窗口
+  final double winSec;      // 振幅统计窗口（秒）
+  final double lagSec;      // 滞后时长（秒）
+  final double fastSec;     // 快速振幅窗口（秒）
+  final double xSec;        // 横向位移窗口（秒）
+  final int minSamples;     // 窗口内最少样本数
   final double moveXMax;    // 横向位移门限
   final double tiltMax;     // 躯干倾角门限（度）
   final double kneeMin;     // 膝角门限（度）
@@ -26,10 +27,11 @@ class CounterConfig {
     this.baseAlpha = 0.06,
     this.ampMin = 0.055,
     this.promK = 0.45,
-    this.win = 60,
-    this.lag = 10,
-    this.fastWin = 24,
-    this.xWin = 36,
+    this.winSec = 2.00,
+    this.lagSec = 0.333,
+    this.fastSec = 0.7667,
+    this.xSec = 1.20,
+    this.minSamples = 20,
     this.moveXMax = 0.25,
     this.tiltMax = 35,
     this.kneeMin = 100,
@@ -41,10 +43,11 @@ class CounterConfig {
     double? baseAlpha,
     double? ampMin,
     double? promK,
-    int? win,
-    int? lag,
-    int? fastWin,
-    int? xWin,
+    double? winSec,
+    double? lagSec,
+    double? fastSec,
+    double? xSec,
+    int? minSamples,
     double? moveXMax,
     double? tiltMax,
     double? kneeMin,
@@ -55,10 +58,11 @@ class CounterConfig {
       baseAlpha: baseAlpha ?? this.baseAlpha,
       ampMin: ampMin ?? this.ampMin,
       promK: promK ?? this.promK,
-      win: win ?? this.win,
-      lag: lag ?? this.lag,
-      fastWin: fastWin ?? this.fastWin,
-      xWin: xWin ?? this.xWin,
+      winSec: winSec ?? this.winSec,
+      lagSec: lagSec ?? this.lagSec,
+      fastSec: fastSec ?? this.fastSec,
+      xSec: xSec ?? this.xSec,
+      minSamples: minSamples ?? this.minSamples,
       moveXMax: moveXMax ?? this.moveXMax,
       tiltMax: tiltMax ?? this.tiltMax,
       kneeMin: kneeMin ?? this.kneeMin,
@@ -83,7 +87,7 @@ class Counter {
 
   double? _baseHipY;
   double _smooth = 0;
-  final List<double> _hist = [];
+  final List<(double, double)> _hist = [];   // (t, v)
   final List<double> _wave = [];
 
   int _dir = 1;
@@ -95,7 +99,7 @@ class Counter {
 
   double _amp = 0;
   double _prom = 0;
-  final List<double> _xBuf = [];
+  final List<(double, double)> _xHist = [];  // (t, v)
   String _gate = 'ok';
 
   int get count => _count;
@@ -120,14 +124,24 @@ class Counter {
     _count = 0;
     _amp = 0;
     _prom = 0;
-    _xBuf.clear();
+    _xHist.clear();
     _gate = 'ok';
   }
 
-  static List<double> _sorted(List<double> src) {
-    final copy = List<double>.from(src);
-    copy.sort();
-    return copy;
+  /// 取时间窗内的值并升序排序。lagSec>0 时排除最近 lagSec 的数据。
+  static List<double> _windowValues(
+      List<(double, double)> arr, double now, double winSec,
+      [double lagSec = 0]) {
+    final lo = now - winSec * 1000;
+    final hi = lagSec > 0 ? now - lagSec * 1000 : double.infinity;
+    final out = <double>[];
+    for (var i = arr.length - 1; i >= 0; i--) {
+      final e = arr[i];
+      if (e.$1 < lo) break;
+      if (e.$1 <= hi) out.add(e.$2);
+    }
+    out.sort();
+    return out;
   }
 
   /// 送入一帧姿态，返回本帧是否确认了一个新峰。
@@ -145,18 +159,24 @@ class Counter {
     _wave.add(_smooth);
     if (_wave.length > 260) _wave.removeAt(0);
 
-    _hist.add(_smooth);
-    if (_hist.length > c.win) _hist.removeAt(0);
+    _hist.add((nowMs, _smooth));
+    final histKeep = nowMs - c.winSec * 1000 * 3;
+    while (_hist.isNotEmpty && _hist.first.$1 < histKeep) {
+      _hist.removeAt(0);
+    }
 
     // ---- 动作闸门 ----
     final hipX = ctx?.hipX;
     if (hipX != null) {
-      _xBuf.add(hipX);
-      if (_xBuf.length > c.xWin) _xBuf.removeAt(0);
+      _xHist.add((nowMs, hipX));
+      final xKeep = nowMs - c.xSec * 1000 * 3;
+      while (_xHist.isNotEmpty && _xHist.first.$1 < xKeep) {
+        _xHist.removeAt(0);
+      }
     }
     var moving = false;
-    if (_xBuf.length >= 12) {
-      final xs = _sorted(_xBuf);
+    final xs = _windowValues(_xHist, nowMs, c.xSec);
+    if (xs.length >= 12) {
       final xr = xs[((xs.length * 0.9).floor())] -
           xs[((xs.length * 0.1).floor())];
       if (xr > c.moveXMax) moving = true;
@@ -167,7 +187,9 @@ class Counter {
     final bending = tilt > c.tiltMax || (kneeL < c.kneeMin && kneeR < c.kneeMin);
     _gate = moving ? 'move' : (bending ? 'bend' : 'ok');
 
-    if (_hist.length < 20 || _gate != 'ok') {
+    final win = _windowValues(_hist, nowMs, c.winSec, c.lagSec);
+
+    if (_hist.length < c.minSamples || _gate != 'ok' || win.length < 8) {
       _dir = 1;
       _ext = _smooth;
       _extT = nowMs;
@@ -176,7 +198,6 @@ class Counter {
     }
 
     // ---- 振幅：滞后窗口 p10/p90 ----
-    final win = _sorted(_hist.sublist(0, _hist.length - c.lag));
     final n = win.length;
     final p10 = win[(n * 0.10).floor()];
     final p90 = win[(n * 0.90).floor()];
@@ -184,10 +205,11 @@ class Counter {
     _prom = _amp * c.promK;
 
     // ---- 快速振幅 ----
-    final fastN = c.fastWin < _hist.length ? c.fastWin : _hist.length;
-    final fast = _sorted(_hist.sublist(_hist.length - fastN));
-    final ampFast =
-        (fast[(fastN * 0.9).floor()] - fast[(fastN * 0.1).floor()]) / 2;
+    final fast = _windowValues(_hist, nowMs, c.fastSec);
+    final fastN = fast.length;
+    final ampFast = fastN >= 2
+        ? (fast[(fastN * 0.9).floor()] - fast[(fastN * 0.1).floor()]) / 2
+        : 0.0;
 
     if (ampFast < c.ampMin) {
       _dir = 1;

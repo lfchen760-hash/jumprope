@@ -188,14 +188,17 @@ export npm_config_cache=/root/dsh/test/.npm-cache
 全在 `counter.mjs` 的 `DEFAULT_CFG`，**不要散落到别处**。
 
 ```
-AMP_MIN=0.055  PROM_K=0.45  MIN_DT=150  SMOOTH=0.60
-MOVE_X_MAX=0.25  TILT_MAX=35  KNEE_MIN=100
+AMP_MIN=0.055   PROM_K=0.45   MIN_DT=150ms   SMOOTH=0.60
+WIN_SEC=2.00    LAG_SEC=0.333  FAST_SEC=0.7667  X_SEC=1.20
+MOVE_X_MAX=0.25  TILT_MAX=35   KNEE_MIN=100
 ```
 
-### 已知待办
+**窗口一律按秒计**（曾按帧数，换帧率会改变行为）。
 
-**窗口目前按帧数算**（WIN=60 帧等）。换帧率设备会改变行为。
-P0 计划改成按秒 —— 还没做。
+### 帧率无关性（P0 已完成）
+
+窗口按秒计，同一段视频在 12–30fps 采样下计数稳定在 157–162。
+原生相机帧间隔不均匀，按帧数计窗口会失真，按秒不会。
 
 ---
 

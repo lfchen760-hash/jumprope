@@ -19,10 +19,11 @@ export const DEFAULT_CFG = {
   BASE_ALPHA: 0.06, // 慢速基线跟随速度（去直流）
   AMP_MIN: 0.055,   // 振幅下限：约等于髋部 3cm 峰峰值。低于此值视为没在跳
   PROM_K: 0.45,     // 峰确认回落量 = 振幅 × PROM_K
-  WIN: 60,          // 振幅统计窗口（帧）
-  LAG: 10,          // 滞后帧数
-  FAST_WIN: 24,     // 快速振幅窗口：停跳后用它快速关闸
-  X_WIN: 36,        // 横向位移统计窗口（帧，约 1.2 秒）
+  WIN_SEC: 2.00,    // 振幅统计窗口（秒）
+  LAG_SEC: 0.333,   // 滞后时长（秒）：阈值用"过去"的数据算
+  FAST_SEC: 0.7667, // 快速振幅窗口（秒）：停跳后快速关闸（=24帧@30fps）
+  X_SEC: 1.20,      // 横向位移统计窗口（秒）
+  MIN_SAMPLES: 20,  // 窗口内最少样本数（统计稳定性下限）
   MOVE_X_MAX: 0.25, // 髋部横向移动超过画面宽度 25% → 判定为走动，暂停计数
   TILT_MAX: 35,     // 躯干倾角超过 35° → 判定为弯腰，暂停计数
   KNEE_MIN: 100,    // 双膝都小于 100° → 判定为深蹲，暂停计数
@@ -33,7 +34,7 @@ export function createCounter(cfg = {}) {
 
   let baseHipY = null;
   let smooth = 0;
-  let hist = [];
+  let hist = [];        // [{ t, v }]
   let wave = [];
 
   let dir = 1;          // 1 = 上升段，-1 = 下降段
@@ -45,8 +46,21 @@ export function createCounter(cfg = {}) {
 
   let amp = 0;
   let prom = 0;
-  let xBuf = [];
+  let xHist = [];       // [{ t, v }]
   let gate = 'ok';          // ok | move | bend
+
+  /** 取时间窗内的值并升序排序。lagSec>0 时排除最近 lagSec 的数据。 */
+  function windowValues(arr, now, winSec, lagSec = 0) {
+    const lo = now - winSec * 1000;
+    const hi = lagSec > 0 ? now - lagSec * 1000 : Infinity;
+    const out = [];
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const e = arr[i];
+      if (e.t < lo) break;
+      if (e.t <= hi) out.push(e.v);
+    }
+    return out.sort((a, b) => a - b);
+  }
 
   function reset() {
     baseHipY = null;
@@ -61,7 +75,7 @@ export function createCounter(cfg = {}) {
     count = 0;
     amp = 0;
     prom = 0;
-    xBuf = [];
+    xHist = [];
     gate = 'ok';
   }
 
@@ -83,17 +97,20 @@ export function createCounter(cfg = {}) {
     wave.push(smooth);
     if (wave.length > 260) wave.shift();
 
-    hist.push(smooth);
-    if (hist.length > C.WIN) hist.shift();
+    hist.push({ t: now, v: smooth });
+    // 只保留最长时间窗的数据，避免无限增长
+    const maxKeep = now - C.WIN_SEC * 1000 * 3;
+    while (hist.length && hist[0].t < maxKeep) hist.shift();
 
     // ---- 动作闸门：走动 / 弯腰 / 深蹲 时暂停计数（调整绳子和站位） ----
     if (ctx && typeof ctx.hipX === 'number') {
-      xBuf.push(ctx.hipX);
-      if (xBuf.length > C.X_WIN) xBuf.shift();
+      xHist.push({ t: now, v: ctx.hipX });
+      const xKeep = now - C.X_SEC * 1000 * 3;
+      while (xHist.length && xHist[0].t < xKeep) xHist.shift();
     }
     let moving = false;
-    if (xBuf.length >= 12) {
-      const xs = [...xBuf].sort((a, b) => a - b);
+    const xs = windowValues(xHist, now, C.X_SEC);
+    if (xs.length >= 12) {
       const xr = xs[Math.floor(xs.length * 0.9)] - xs[Math.floor(xs.length * 0.1)];
       if (xr > C.MOVE_X_MAX) moving = true;
     }
@@ -103,7 +120,9 @@ export function createCounter(cfg = {}) {
     );
     gate = moving ? 'move' : bending ? 'bend' : 'ok';
 
-    if (hist.length < 20 || gate !== 'ok') {
+    const win = windowValues(hist, now, C.WIN_SEC, C.LAG_SEC);
+
+    if (hist.length < C.MIN_SAMPLES || gate !== 'ok' || win.length < 8) {
       // 调整动作期间重置波形状态，恢复跳跃后重新开始跟踪
       dir = 1;
       ext = smooth;
@@ -113,7 +132,6 @@ export function createCounter(cfg = {}) {
     }
 
     // 振幅：滞后窗口的 p10/p90，对偏置和毛刺都免疫
-    const win = hist.slice(0, hist.length - C.LAG).sort((a, b) => a - b);
     const n = win.length;
     const p10 = win[Math.floor(n * 0.10)];
     const p90 = win[Math.floor(n * 0.90)];
@@ -123,9 +141,11 @@ export function createCounter(cfg = {}) {
     // 没在跳：保持方向为上升，等待重新起跳
     // 快速振幅：只看最近一小段。停跳后 ~0.8 秒内就会掉到门限以下，
     // 避免慢窗口里残留的大振幅继续放行若干个假峰。
-    const fastN = Math.min(C.FAST_WIN, hist.length);
-    const fast = hist.slice(hist.length - fastN).sort((a, b) => a - b);
-    const ampFast = (fast[Math.floor(fastN * 0.9)] - fast[Math.floor(fastN * 0.1)]) / 2;
+    const fast = windowValues(hist, now, C.FAST_SEC);
+    const fastN = fast.length;
+    const ampFast = fastN >= 2
+      ? (fast[Math.floor(fastN * 0.9)] - fast[Math.floor(fastN * 0.1)]) / 2
+      : 0;
 
     if (ampFast < C.AMP_MIN) {
       dir = 1;
