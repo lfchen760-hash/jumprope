@@ -15,9 +15,14 @@ import io.flutter.plugin.platform.PlatformViewFactory
  *   PlatformView 是原生 View，渲染路径独立，稳得多。
  */
 class JumpropePreviewView(context: Context) : PlatformView {
+    // 参考 flutter_mp_pose_landmarker 的实现：用默认的 PERFORMANCE(SurfaceView) 模式。
+    // TextureView(COMPATIBLE) 在 PlatformView 里渲染不出画面。
     val previewView: PreviewView = PreviewView(context).apply {
-        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
         scaleType = PreviewView.ScaleType.FILL_CENTER
+        layoutParams = android.view.ViewGroup.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+        )
     }
 
     override fun getView(): View = previewView
