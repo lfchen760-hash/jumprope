@@ -17,7 +17,7 @@ Flutter 版    = 最终产品，仅 Android
 ```
 
 当前阶段：**数据层 v1 + 正式 UI v0**（首页/结果/记录/我的，读库闭环）。
-算法验证继续；档案编辑、月历、live 页视觉还没做。
+算法验证继续；月历、live 页视觉、出框暂停还没做。
 签名已固定为公开 dev key，CI 构建可覆盖升级；正式发布前要换私有 release key。
 
 文档：
@@ -66,7 +66,8 @@ Flutter 版    = 最终产品，仅 Android
 │   │   ├── home_page.dart       首页（目标环 + 开始）
 │   │   ├── result_page.dart     结果页（表盘/统计/节奏）
 │   │   ├── history_page.dart    记录列表
-│   │   ├── profile_page.dart    我的（只读）
+│   │   ├── profile_page.dart    我的（展示 + 编辑入口）
+│   │   ├── profile_form_page.dart 首启引导 / 档案表单
 │   │   └── theme.dart / ui.dart 设计稿色板与通用组件
 │   ├── lib/data/                ★ 本地数据层（SQLite v1）
 │   │   ├── app_database.dart    建表/迁移/DAO
