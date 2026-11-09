@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../data/child_profile.dart';
 import '../data/data_repository.dart';
+import '../data/date_utils.dart';
 import 'history_page.dart';
 import 'home_page.dart';
 import 'profile_form_page.dart';
@@ -20,6 +22,8 @@ class _AppShellState extends State<AppShell> {
   int _dataVersion = 0;
   bool _booting = true;
   bool _needsOnboarding = false;
+  ChildProfile? _profile;
+  int _goal = 300;
 
   @override
   void initState() {
@@ -31,9 +35,12 @@ class _AppShellState extends State<AppShell> {
     try {
       final profile = await _repo.loadProfile();
       final settings = await _repo.loadSettings();
+      final goal = await _repo.goalForDate(todayLocalDate());
       if (!mounted) return;
       setState(() {
         _booting = false;
+        _profile = profile;
+        _goal = goal;
         _needsOnboarding = profile == null || !settings.onboardingDone;
       });
     } catch (_) {
@@ -56,6 +63,8 @@ class _AppShellState extends State<AppShell> {
     if (_needsOnboarding) {
       return ProfileFormPage(
         repo: _repo,
+        initial: _profile,
+        initialGoal: _goal,
         onboarding: true,
         onSaved: () => setState(() {
           _needsOnboarding = false;
