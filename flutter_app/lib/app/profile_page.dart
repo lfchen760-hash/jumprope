@@ -4,13 +4,15 @@ import '../build_info.dart';
 import '../data/child_profile.dart';
 import '../data/data_repository.dart';
 import '../data/date_utils.dart';
+import 'profile_form_page.dart';
 import 'theme.dart';
 import 'ui.dart';
 
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key, required this.repo});
+  const ProfilePage({super.key, required this.repo, required this.onChanged});
 
   final DataRepository repo;
+  final VoidCallback onChanged;
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -40,6 +42,22 @@ class _ProfilePageState extends State<ProfilePage> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _edit() async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ProfileFormPage(
+          repo: widget.repo,
+          initial: _profile,
+          initialGoal: _goal,
+        ),
+      ),
+    );
+    if (changed == true) {
+      await _load();
+      widget.onChanged();
     }
   }
 
@@ -98,6 +116,13 @@ class _ProfilePageState extends State<ProfilePage> {
                   ],
                 ),
               ),
+              TextButton(
+                onPressed: _edit,
+                child: const Text(
+                  '编辑',
+                  style: TextStyle(fontSize: 13, color: AppColors.ink),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 22),
@@ -150,7 +175,7 @@ class _ProfilePageState extends State<ProfilePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '档案编辑、导入导出、隐私设置',
+                  '导入导出、隐私设置',
                   style: TextStyle(fontSize: 13, color: AppColors.ink),
                 ),
                 SizedBox(height: 4),

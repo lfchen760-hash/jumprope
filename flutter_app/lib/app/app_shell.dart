@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/data_repository.dart';
 import 'history_page.dart';
 import 'home_page.dart';
+import 'profile_form_page.dart';
 import 'profile_page.dart';
 import 'theme.dart';
 
@@ -17,20 +18,67 @@ class _AppShellState extends State<AppShell> {
   final _repo = DataRepository();
   int _tab = 0;
   int _dataVersion = 0;
+  bool _booting = true;
+  bool _needsOnboarding = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _boot();
+  }
+
+  Future<void> _boot() async {
+    try {
+      final profile = await _repo.loadProfile();
+      final settings = await _repo.loadSettings();
+      if (!mounted) return;
+      setState(() {
+        _booting = false;
+        _needsOnboarding = profile == null || !settings.onboardingDone;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _booting = false;
+        _needsOnboarding = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_booting) {
+      return const Scaffold(
+        backgroundColor: AppColors.cream,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_needsOnboarding) {
+      return ProfileFormPage(
+        repo: _repo,
+        onboarding: true,
+        onSaved: () => setState(() {
+          _needsOnboarding = false;
+          _dataVersion++;
+        }),
+      );
+    }
+
     return Scaffold(
       body: IndexedStack(
         index: _tab,
         children: [
           HomePage(
             repo: _repo,
+            dataVersion: _dataVersion,
             onOpenHistory: () => setState(() => _tab = 1),
             onDataChanged: () => setState(() => _dataVersion++),
           ),
           HistoryPage(key: ValueKey('history-$_dataVersion'), repo: _repo),
-          ProfilePage(repo: _repo),
+          ProfilePage(
+            repo: _repo,
+            onChanged: () => setState(() => _dataVersion++),
+          ),
         ],
       ),
       bottomNavigationBar: NavigationBar(

@@ -12,11 +12,15 @@ class HomePage extends StatefulWidget {
   const HomePage({
     super.key,
     required this.repo,
+    required this.dataVersion,
     required this.onOpenHistory,
     required this.onDataChanged,
   });
 
   final DataRepository repo;
+
+  /// 档案/目标/会话变化时 +1，首页据此重新读库。
+  final int dataVersion;
   final VoidCallback onOpenHistory;
   final VoidCallback onDataChanged;
 
@@ -40,6 +44,12 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didUpdateWidget(HomePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.dataVersion != widget.dataVersion) _load();
   }
 
   Future<void> _load() async {
