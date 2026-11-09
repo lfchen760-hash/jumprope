@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/services.dart';
 import 'package:jumprope_core/landmark.dart';
 import 'package:jumprope_core/pose_frame.dart';

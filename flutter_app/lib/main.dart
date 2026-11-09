@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:jumprope_core/jumprope_core.dart';
 
 import 'camera_test_page.dart';
@@ -69,8 +67,6 @@ class _HomePageState extends State<HomePage> {
   SessionState _state = SessionState.idle;
   String? _error;
   int _textureId = -1;
-  bool _cameraStarted = false;
-  int _previewReq = -1;
   int _durationSec = 60;
   String _diag = '';
   bool _showDiag = false;
@@ -170,7 +166,6 @@ class _HomePageState extends State<HomePage> {
 
 
       await controller.start();
-      _cameraStarted = true;
       if (mounted) setState(() {});
 
       // 帧数持续刷新，肉眼可见相机有没有输出
@@ -181,11 +176,9 @@ class _HomePageState extends State<HomePage> {
 
       // 稍等一下再读预览请求次数，判断 SurfaceProvider 有没有被调用
       Future.delayed(const Duration(milliseconds: 1500), () async {
-        final n = await _landmarker.getPreviewRequests();
         final d = await _landmarker.getPreviewDebug();
         if (mounted) {
           setState(() {
-            _previewReq = n;
             _previewDebug = d;
           });
         }
