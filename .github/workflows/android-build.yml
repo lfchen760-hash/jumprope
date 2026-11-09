@@ -72,6 +72,9 @@ jobs:
           mkdir -p ci_app/android/app/src/main/kotlin/com/jumprope
           cp -r flutter_app/android/app/src/main/kotlin/com/jumprope/. \
                 ci_app/android/app/src/main/kotlin/com/jumprope/
+          mkdir -p ci_app/android/app/src/main/res
+          cp -r flutter_app/android/app/src/main/res/. \
+                ci_app/android/app/src/main/res/
 
       - name: 注册插件 + 权限 + 依赖
         run: bash .github/scripts/prepare_android.sh ci_app
