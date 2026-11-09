@@ -86,6 +86,14 @@ jobs:
           echo "已安装 init.gradle："
           head -5 ~/.gradle/init.gradle
 
+      - name: 准备固定签名（DEV ONLY）
+        if: ${{ github.event_name == 'push' || inputs.build_apk }}
+        run: |
+          mkdir -p ci_app/android/app
+          cp ci/android/dev-upload-keystore.p12 ci_app/android/app/
+          cp ci/android/dev-keystore.properties ci_app/android/app/
+          echo "KEYSTORE_PROPERTIES=$PWD/ci_app/android/app/dev-keystore.properties" >> "$GITHUB_ENV"
+
       - name: 解析依赖
         working-directory: ci_app
         run: flutter pub get
@@ -101,8 +109,23 @@ jobs:
           set -o pipefail
           # release + 仅 arm64：体积约为 debug 全架构的 1/5，手机下载更快
           flutter build apk --release --target-platform android-arm64 \
+            --build-number=${{ github.run_number }} \
             --dart-define=BUILD_ID=${GITHUB_SHA::7} \
             --dart-define=CAMERA_TEST=${{ inputs.camera_test || 'false' }} 2>&1 | tee /tmp/build.log
+
+      - name: 校验签名证书
+        if: ${{ (github.event_name == 'push' || inputs.build_apk) && success() }}
+        run: |
+          APK=ci_app/build/app/outputs/flutter-apk/app-release.apk
+          SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          APKSIGNER=$(find "$SDK/build-tools" -name apksigner -type f | sort | tail -1)
+          FP=$($APKSIGNER verify --print-certs "$APK" | grep -i 'certificate SHA-256 digest' | head -1 | sed 's/.*digest: //' | tr -d ': ' | tr '[:lower:]' '[:upper:]')
+          EXPECT=F25A84D538584AF8A19F4846C169CD6E549F70E3A7207CC4E5040F12EA3667A4
+          echo "APK 证书: $FP"
+          if [ "$FP" != "$EXPECT" ]; then
+            echo "::error::APK 签名证书不是正式签名，禁止发布"
+            exit 1
+          fi
 
       - name: 失败时把日志推回仓库
         if: failure()

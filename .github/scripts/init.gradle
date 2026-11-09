@@ -37,3 +37,39 @@ allprojects { project ->
     applyMirrors(project.buildscript.repositories)
     applyMirrors(project.repositories)
 }
+
+// ── 固定签名（DEV ONLY）──────────────────────────────────
+// 说明：仓库是公开的，这里用的是「开发签名」keystore，密码也在仓库里。
+// 仅用于内部测试：保证每次 CI 构建证书一致，APK 能覆盖升级、数据不丢。
+// 正式发布前必须换成私有的 release key（届时老用户需卸载一次）。
+// 放在 init.gradle 里，避免每次 flutter create 后还要改 build.gradle。
+allprojects { project ->
+    project.afterEvaluate {
+        def androidExt = project.extensions.findByName('android')
+        if (androidExt == null) return
+        def propsPath = System.getenv('KEYSTORE_PROPERTIES')
+        if (!propsPath) return
+        try {
+            def props = new Properties()
+            new File(propsPath).withInputStream { props.load(it) }
+            def ksFile = new File(new File(propsPath).parentFile, props.getProperty('storeFile'))
+            if (!ksFile.exists()) {
+                throw new GradleException("keystore 不存在: ${ksFile}")
+            }
+            def release = androidExt.signingConfigs.findByName('release')
+            if (release == null) {
+                release = androidExt.signingConfigs.create('release')
+            }
+            release.storeFile = ksFile
+            release.storePassword = props.getProperty('storePassword')
+            release.keyAlias = props.getProperty('keyAlias') ?: 'upload'
+            release.keyPassword = props.getProperty('keyPassword') ?: props.getProperty('storePassword')
+            release.storeType = props.getProperty('storeType') ?: 'PKCS12'
+            androidExt.buildTypes.release.signingConfig = release
+            println "[init.gradle] release 使用固定签名: ${ksFile}"
+        } catch (Exception e) {
+            println "[init.gradle] 签名配置失败: ${e.message}"
+            throw e
+        }
+    }
+}
