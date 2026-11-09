@@ -1,5 +1,8 @@
 name: CI
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [main]
@@ -44,8 +47,25 @@ jobs:
 
       - name: 静态分析
         working-directory: flutter_app
-        run: flutter analyze
+        run: |
+          set -o pipefail
+          flutter analyze 2>&1 | tee /tmp/flutter_analyze.log
 
       - name: 数据层单元测试
         working-directory: flutter_app
-        run: flutter test
+        run: |
+          set -o pipefail
+          flutter test 2>&1 | tee /tmp/flutter_test.log
+
+      - name: 失败日志推回仓库
+        if: failure()
+        run: |
+          mkdir -p ci-logs
+          cp /tmp/flutter_analyze.log ci-logs/ 2>/dev/null || true
+          cp /tmp/flutter_test.log ci-logs/ 2>/dev/null || true
+          git config user.name "ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          git checkout -B ci-logs-flutter
+          git add -f ci-logs
+          git commit -m "ci: flutter analyze/test log [skip ci]" || true
+          git push -f origin ci-logs-flutter
