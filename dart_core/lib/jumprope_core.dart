@@ -10,4 +10,5 @@ export 'pose_source.dart';
 export 'posture.dart';
 export 'replay_pose_source.dart';
 export 'session_controller.dart';
+export 'session_result.dart';
 export 'session_state.dart';

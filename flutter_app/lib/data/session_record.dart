@@ -1,6 +1,10 @@
 import 'dart:convert';
 
+import 'package:jumprope_core/pose_source.dart';
+import 'package:jumprope_core/session_result.dart';
+
 import 'child_profile.dart';
+import 'date_utils.dart';
 
 enum SessionMode { timed60, timed180, free }
 
@@ -24,6 +28,13 @@ String sessionModeLabel(SessionMode m) => switch (m) {
   SessionMode.timed60 => '1 分钟',
   SessionMode.timed180 => '3 分钟',
   SessionMode.free => '自由跳',
+};
+
+/// 计时时长 → 模式；不在 60/180 里就当自由跳。
+SessionMode sessionModeForDuration(int durationSec) => switch (durationSec) {
+  60 => SessionMode.timed60,
+  180 => SessionMode.timed180,
+  _ => SessionMode.free,
 };
 
 /// 一次训练。`jumps` 是唯一事实，中断/节奏/平均都从它算。
@@ -67,6 +78,45 @@ class SessionRecord {
     required this.appVersion,
     required this.createdAt,
   }) : jumps = List.unmodifiable([...jumps]..sort());
+
+  /// 从计数核心的 [SessionResult] 生成一条可落库记录。
+  ///
+  /// 只做映射，不碰数据库；落库由 `SessionSaver` 负责。
+  factory SessionRecord.fromResult({
+    required String id,
+    required SessionResult result,
+    required DateTime startedAt,
+    required DateTime endedAt,
+    required SessionMode mode,
+    ChildProfile? profile,
+    String? standardVersion,
+    String algoVersion = 'counter-v1',
+    String appVersion = 'unknown',
+    DateTime? createdAt,
+  }) {
+    return SessionRecord(
+      id: id,
+      startedAtUtc: startedAt.toUtc(),
+      endedAtUtc: endedAt.toUtc(),
+      localDate: localDateOf(startedAt),
+      tzOffsetMin: startedAt.timeZoneOffset.inMinutes,
+      mode: mode,
+      source: result.source == SourceKind.camera
+          ? SessionSource.camera
+          : SessionSource.manual,
+      count: result.count,
+      activeMs: result.activeMs,
+      jumps: result.jumps,
+      valid: result.valid,
+      invalidReasons: result.invalidReasons,
+      gradeAtSession: profile?.grade,
+      genderAtSession: profile?.gender,
+      standardVersion: standardVersion,
+      algoVersion: algoVersion,
+      appVersion: appVersion,
+      createdAt: (createdAt ?? DateTime.now()).toUtc(),
+    );
+  }
 
   bool get isTimed60 => mode == SessionMode.timed60;
 

@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jumprope_core/pose_source.dart';
+import 'package:jumprope_core/session_result.dart';
 import 'package:jumprope_app/data/app_settings.dart';
 import 'package:jumprope_app/data/child_profile.dart';
+import 'package:jumprope_app/data/date_utils.dart';
 import 'package:jumprope_app/data/export_bundle.dart';
 import 'package:jumprope_app/data/goal_entry.dart';
 import 'package:jumprope_app/data/jump_benchmark.dart';
@@ -102,6 +105,73 @@ void main() {
     expect(stats.best, 200);
     expect(stats.streak, 2);
     expect(stats.avgPerActiveDay, 150);
+  });
+
+  test('SessionRecord.fromResult maps core result', () {
+    final start = DateTime(2026, 11, 9, 9, 41);
+    final result = SessionResult(
+      count: 3,
+      jumps: const [320, 650, 980],
+      activeMs: 60000,
+      plannedMs: 60000,
+      completed: true,
+      valid: true,
+      invalidReasons: const [],
+      source: SourceKind.camera,
+    );
+    final r = SessionRecord.fromResult(
+      id: 'r1',
+      result: result,
+      startedAt: start,
+      endedAt: start.add(const Duration(seconds: 60)),
+      mode: sessionModeForDuration(60),
+      profile: const ChildProfile(grade: 3, gender: Gender.male),
+      standardVersion: JumpBenchmark.version,
+      algoVersion: 'test',
+      appVersion: '0.1.0',
+    );
+
+    expect(r.count, 3);
+    expect(r.jumps, [320, 650, 980]);
+    expect(r.activeMs, 60000);
+    expect(r.mode, SessionMode.timed60);
+    expect(r.source, SessionSource.camera);
+    expect(r.localDate, localDateOf(start));
+    expect(r.tzOffsetMin, start.timeZoneOffset.inMinutes);
+    expect(r.gradeAtSession, 3);
+    expect(r.genderAtSession, Gender.male);
+    expect(r.valid, isTrue);
+    expect(r.endedAtUtc, isNotNull);
+  });
+
+  test('SessionRecord.fromResult keeps invalid reasons / replay source', () {
+    final start = DateTime(2026, 11, 9, 9, 41);
+    final result = SessionResult(
+      count: 1,
+      jumps: const [100],
+      activeMs: 3000,
+      plannedMs: 60000,
+      completed: false,
+      valid: false,
+      invalidReasons: const [
+        SessionResult.reasonUnfinished,
+        SessionResult.reasonNotCamera,
+      ],
+      source: SourceKind.replay,
+    );
+    final r = SessionRecord.fromResult(
+      id: 'r2',
+      result: result,
+      startedAt: start,
+      endedAt: start.add(const Duration(seconds: 3)),
+      mode: SessionMode.timed60,
+    );
+
+    expect(r.valid, isFalse);
+    expect(r.invalidReasons, ['unfinished', 'not_camera']);
+    expect(r.source, SessionSource.manual);
+    expect(r.gradeAtSession, isNull);
+    expect(r.genderAtSession, isNull);
   });
 
   test('goal history picks the effective goal', () {

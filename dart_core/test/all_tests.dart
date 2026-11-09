@@ -17,6 +17,7 @@ import '../lib/pose_source.dart';
 import '../lib/posture.dart';
 import '../lib/replay_pose_source.dart';
 import '../lib/session_controller.dart';
+import '../lib/session_result.dart';
 import '../lib/session_state.dart';
 import 'dart:async';
 
@@ -90,7 +91,8 @@ void testGoldenVectors() {
     final label = (d['labelCount'] as num?)?.toInt();
     final actual = _runCounter(d);
     final name = (d['name'] as String?) ?? f.uri.pathSegments.last;
-    print('   ${name.padRight(16)} Dart $actual  期望 $expected  标注 ${label ?? '-'}');
+    print(
+        '   ${name.padRight(16)} Dart $actual  期望 $expected  标注 ${label ?? '-'}');
     check('$name 计数一致', actual == expected, '期望 $expected，实际 $actual');
   }
 }
@@ -117,7 +119,8 @@ void testCounterBehaviour() {
     for (var i = 0; i < 180; i++) {
       final phase = (i % 12) / 12 * 2 * 3.14159265;
       final y = 0.55 - 0.05 * (phase < 3.14159 ? 1.0 : 0.0);
-      c.feed(y, 0.18, t, const PoseContext(hipX: 0.5, tilt: 0, kneeL: 178, kneeR: 178));
+      c.feed(y, 0.18, t,
+          const PoseContext(hipX: 0.5, tilt: 0, kneeL: 178, kneeR: 178));
       t += 33;
     }
     check('周期跳跃会计数', c.count > 5, '实际 ${c.count}');
@@ -129,7 +132,8 @@ void testCounterBehaviour() {
     var t = 0.0;
     for (var i = 0; i < 120; i++) {
       final y = 0.55 - 0.05 * ((i % 12) < 6 ? 1.0 : 0.0);
-      c.feed(y, 0.18, t, const PoseContext(hipX: 0.5, tilt: 0, kneeL: 178, kneeR: 178));
+      c.feed(y, 0.18, t,
+          const PoseContext(hipX: 0.5, tilt: 0, kneeL: 178, kneeR: 178));
       t += 33;
     }
     final before = c.count;
@@ -144,7 +148,8 @@ void testCounterBehaviour() {
     var t = 0.0;
     for (var i = 0; i < 120; i++) {
       final y = 0.55 - 0.05 * ((i % 12) < 6 ? 1.0 : 0.0);
-      c.feed(y, 0.18, t, const PoseContext(hipX: 0.5, tilt: 60, kneeL: 178, kneeR: 178));
+      c.feed(y, 0.18, t,
+          const PoseContext(hipX: 0.5, tilt: 60, kneeL: 178, kneeR: 178));
       t += 33;
     }
     check('弯腰（倾角 60°）时不计数', c.count == 0, '实际 ${c.count}');
@@ -198,7 +203,7 @@ void testPosture() {
   const c = Landmark(1, 1, 0, 1);
   checkClose('直角 = 90°', angleAt(a, b, c), 90, 1e-6);
 
-  const far = Landmark(2, 0, 0, 1);   // a-b-far 三点共线，b 在中间
+  const far = Landmark(2, 0, 0, 1); // a-b-far 三点共线，b 在中间
   checkClose('共线反向 = 180°', angleAt(a, b, far), 180, 1e-6);
   check('重合点兜底 180°', angleAt(b, b, c) == 180);
 
@@ -206,7 +211,6 @@ void testPosture() {
   final p = postureOf(zero);
   check('NaN 场景不产生 NaN', p.tilt.isFinite && p.kneeL.isFinite);
 }
-
 
 /* ---------------- 会话编排 ---------------- */
 
@@ -217,11 +221,11 @@ List<Landmark> skeleton(double hipY) {
     lm[i] = Landmark(x, y, 0, v);
   }
 
-  put(0, 0.5, hipY - 0.30);   // 鼻子
+  put(0, 0.5, hipY - 0.30); // 鼻子
   put(11, 0.44, hipY - 0.25); // 左肩
   put(12, 0.56, hipY - 0.25); // 右肩
-  put(23, 0.45, hipY);        // 左髋
-  put(24, 0.55, hipY);        // 右髋
+  put(23, 0.45, hipY); // 左髋
+  put(24, 0.55, hipY); // 右髋
   put(25, 0.45, hipY + 0.12); // 左膝
   put(26, 0.55, hipY + 0.12); // 右膝
   put(27, 0.45, hipY + 0.25); // 左踝
@@ -272,13 +276,212 @@ Future<void> testSession() async {
   await Future<void>.delayed(const Duration(milliseconds: 50));
   await sub.cancel();
 
-  check('经历取景阶段', phases.contains(SessionPhase.positioning),
-      '实际 $phases');
+  check('经历取景阶段', phases.contains(SessionPhase.positioning), '实际 $phases');
   check('进入计数阶段', phases.contains(SessionPhase.running), '实际 $phases');
   check('最终结束', phases.contains(SessionPhase.finished), '实际 $phases');
   check('计数大于 0', sc.current.count > 0, '实际 ${sc.current.count}');
   check('结束后剩余时间为 0', sc.current.remainingMs == 0);
   await sc.dispose();
+}
+
+/// 手动驱动帧的数据源：测试暂停 / 提前结束时要能精确控制时间轴。
+class _ManualSource implements PoseSource {
+  final _c = StreamController<PoseFrame>.broadcast(sync: true);
+
+  @override
+  Stream<PoseFrame> get frames => _c.stream;
+
+  @override
+  SourceKind get kind => SourceKind.camera;
+
+  @override
+  Future<void> start() async {}
+
+  @override
+  Future<void> stop() async {
+    if (!_c.isClosed) await _c.close();
+  }
+
+  @override
+  Future<void> dispose() => stop();
+
+  void emit(PoseFrame f) {
+    if (!_c.isClosed) _c.add(f);
+  }
+}
+
+Future<void> testSessionResult() async {
+  section('会话结果（jumps / activeMs / valid）');
+
+  // --- 回放：4s 会话，jumps 与计时完整 ---
+  {
+    final src = ReplayPoseSource();
+    src.loadFrames(jumpingFrames(seconds: 6));
+    final sc = SessionController(
+      source: src,
+      durationSec: 4,
+      countdownSec: 0,
+      stableMs: 0,
+    );
+    await sc.start();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    final r = sc.result;
+    check('结束时有结果', r != null);
+    if (r != null) {
+      check('结果 count 与状态一致', r.count == sc.current.count,
+          '结果 ${r.count} / 状态 ${sc.current.count}');
+      check('jumps 数 == count', r.jumps.length == r.count,
+          'jumps ${r.jumps.length} / count ${r.count}');
+
+      var sorted = true;
+      for (var i = 1; i < r.jumps.length; i++) {
+        if (r.jumps[i] < r.jumps[i - 1]) sorted = false;
+      }
+      check('jumps 升序', sorted, '${r.jumps}');
+      check('jumps 落在活动时间内', r.jumps.every((j) => j >= 0 && j <= r.activeMs),
+          '${r.jumps}');
+      check('activeMs == 4000', r.activeMs == 4000, '实际 ${r.activeMs}');
+      check(
+          '回放未计入统计',
+          !r.valid && r.invalidReasons.contains(SessionResult.reasonNotCamera),
+          '${r.invalidReasons}');
+    }
+    await sc.dispose();
+  }
+
+  // --- 暂停：活动时长不含暂停段 ---
+  {
+    final src = _ManualSource();
+    final sc = SessionController(
+      source: src,
+      durationSec: 10,
+      countdownSec: 0,
+      stableMs: 0,
+    );
+    await sc.start();
+    final frames = jumpingFrames(seconds: 2);
+    for (final f in frames) {
+      src.emit(f);
+    }
+    check('进入计数阶段', sc.current.phase == SessionPhase.running,
+        '实际 ${sc.current.phase}');
+    final before = sc.current.activeMs;
+    check('暂停前已计时', before > 1500, '实际 $before');
+
+    sc.pause();
+    check('暂停后 phase=paused', sc.current.phase == SessionPhase.paused);
+    for (var i = 0; i < 21; i++) {
+      src.emit(PoseFrame(2000 + i * 50.0, skeleton(0.5)));
+    }
+    check('暂停期间活动时长不变', sc.current.activeMs == before,
+        '暂停前 $before / 现在 ${sc.current.activeMs}');
+
+    sc.resume();
+    src.emit(PoseFrame(4000, skeleton(0.5)));
+    final after = sc.current.activeMs;
+    check('恢复后只增加 1s（4000-3000）', (after - before - 1000).abs() <= 2,
+        '暂停前 $before / 现在 $after');
+
+    sc.finishEarly();
+    final r = sc.result;
+    check('提前结束有结果', r != null);
+    if (r != null) {
+      check(
+          '提前结束未完成',
+          !r.valid && r.invalidReasons.contains(SessionResult.reasonUnfinished),
+          '${r.invalidReasons}');
+      check('结果活动时长一致', r.activeMs == after, '结果 ${r.activeMs} / 状态 $after');
+    }
+    await sc.dispose();
+  }
+
+  // --- 自由跳：不自动结束，手动结束时算完成 ---
+  {
+    final src = _ManualSource();
+    final sc = SessionController(
+      source: src,
+      durationSec: 0,
+      countdownSec: 0,
+      stableMs: 0,
+    );
+    await sc.start();
+    for (final f in jumpingFrames(seconds: 3)) {
+      src.emit(f);
+    }
+    check('自由跳不自动结束', sc.current.phase == SessionPhase.running,
+        '实际 ${sc.current.phase}');
+    check('实时活动时长递增', sc.current.activeMs > 1000, '实际 ${sc.current.activeMs}');
+    check('实时 jumps 可见', sc.current.jumps.length == sc.current.count,
+        'jumps ${sc.current.jumps.length} / count ${sc.current.count}');
+
+    sc.finishEarly();
+    final r = sc.result;
+    check('自由跳提前结束有结果', r != null);
+    if (r != null) {
+      check('自由跳 plannedMs=0', r.plannedMs == 0, '实际 ${r.plannedMs}');
+      check('自由跳算完成', r.completed);
+      check('相机自由跳有效', r.valid, '${r.invalidReasons}');
+      check('自由跳 activeMs 约 3s', (r.activeMs - 3000).abs() <= 60,
+          '实际 ${r.activeMs}');
+    }
+    await sc.dispose();
+  }
+
+  // --- 0 跳：标无效，避免把「站着不动」算成活跃天 ---
+  {
+    final src = _ManualSource();
+    final sc = SessionController(
+      source: src,
+      durationSec: 0,
+      countdownSec: 0,
+      stableMs: 0,
+    );
+    await sc.start();
+    for (var t = 0.0; t <= 1000; t += 33.0) {
+      src.emit(PoseFrame(t, skeleton(0.5)));
+    }
+    sc.finishEarly();
+    final r = sc.result;
+    check('0 跳会话有结果', r != null);
+    if (r != null) {
+      check(
+          '0 跳标无效',
+          !r.valid && r.invalidReasons.contains(SessionResult.reasonNoJumps),
+          '${r.invalidReasons}');
+    }
+    await sc.dispose();
+  }
+
+  // --- 出框累计 > 3s：无效 ---
+  {
+    final src = _ManualSource();
+    final sc = SessionController(
+      source: src,
+      durationSec: 10,
+      countdownSec: 0,
+      stableMs: 0,
+    );
+    await sc.start();
+    for (var t = 0.0; t <= 1000; t += 33.0) {
+      src.emit(PoseFrame(t, skeleton(0.5)));
+    }
+    for (var t = 1033.0; t <= 5000; t += 33.0) {
+      src.emit(PoseFrame(t, const []));
+    }
+    src.emit(PoseFrame(5020, skeleton(0.5)));
+
+    sc.finishEarly();
+    final r = sc.result;
+    check('出框会话有结果', r != null);
+    if (r != null) {
+      check(
+          '出框累计超限无效',
+          !r.valid && r.invalidReasons.contains(SessionResult.reasonOutOfFrame),
+          '${r.invalidReasons}');
+    }
+    await sc.dispose();
+  }
 }
 
 void testFramingRejectsBadPose() {
@@ -288,7 +491,8 @@ void testFramingRejectsBadPose() {
   final small = PoseFrame(
     0,
     far.landmarks
-        .map((p) => Landmark(0.5 + (p.x - 0.5) * 0.3, 0.5 + (p.y - 0.5) * 0.3, 0, p.visibility))
+        .map((p) => Landmark(
+            0.5 + (p.x - 0.5) * 0.3, 0.5 + (p.y - 0.5) * 0.3, 0, p.visibility))
         .toList(),
   );
   check('太远被拒', !evaluateFramingForTest(small));
@@ -315,6 +519,7 @@ Future<void> main() async {
   testPosture();
   testReplaySource();
   await testSession();
+  await testSessionResult();
   testFramingRejectsBadPose();
 
   print('\n${'=' * 50}');

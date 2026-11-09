@@ -3,7 +3,7 @@
 给接手的 agent（或未来的自己）看的操作手册。
 **只写「不看就会踩坑」的东西**，不写代码细节。
 
-最后更新：2026-11-09
+最后更新：2026-11-10
 
 ---
 
@@ -54,8 +54,9 @@ Flutter 版    = 最终产品，仅 Android
 │   ├── lib/pose_source.dart     数据源抽象（相机/视频/回放）
 │   ├── lib/replay_pose_source.dart  日志回放
 │   ├── lib/session_controller.dart  会话编排
+│   ├── lib/session_result.dart  会话结果（jumps/activeMs/valid）
 │   ├── verify.dart              跑黄金向量验证
-│   └── test/all_tests.dart      ★ 全部单元测试（24 项）
+│   └── test/all_tests.dart      ★ 全部单元测试（51 项）
 │
 ├── flutter_app/                 Flutter 外壳
 │   ├── lib/main.dart            相机验证主界面（570 行，非正式 UI）
@@ -63,6 +64,7 @@ Flutter 版    = 最终产品，仅 Android
 │   │   ├── app_database.dart    建表/迁移/DAO
 │   │   ├── data_repository.dart 门面 + 导入导出
 │   │   ├── session_record.dart  会话（逐跳时间戳）
+│   │   ├── session_saver.dart   结束后自动落库
 │   │   ├── child_profile.dart   孩子档案
 │   │   ├── jump_benchmark.dart  2014 国标阈值表
 │   │   └── period_stats.dart    日/周/月/年统计
@@ -245,6 +247,9 @@ MOVE_X_MAX=0.25  TILT_MAX=35   KNEE_MIN=100
   backup；整体替换用 `replace: true`。
 - 数据层测试：`flutter_app/test/data_layer_test.dart`（纯逻辑，不碰 sqflite）。
   CI 会跑 `flutter test`。
+- 会话结束（`finished`）时 `SessionSaver` 自动写一条 `SessionRecord`：
+  `SessionResult` → `SessionRecord.fromResult` → `DataRepository.saveSession`。
+  只写一次；0 跳会话也存，但 `valid=false`（`no_jumps`），不进统计。
 
 ### 签名（DEV ONLY，已落地）
 

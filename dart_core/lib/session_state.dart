@@ -14,6 +14,13 @@ class SessionState {
   final String gate;
   final bool hasPose;
 
+  /// 活动时长（毫秒，扣暂停）。running/paused 时实时更新。
+  final int activeMs;
+
+  /// 逐跳 offsetMs（活动时间）。**只读视图**，会话结束后用
+  /// [SessionController.result] 里的不可变副本，别长期持有这个引用。
+  final List<int> jumps;
+
   const SessionState({
     required this.phase,
     required this.count,
@@ -22,6 +29,8 @@ class SessionState {
     required this.framing,
     required this.gate,
     required this.hasPose,
+    this.activeMs = 0,
+    this.jumps = const [],
   });
 
   static const idle = SessionState(

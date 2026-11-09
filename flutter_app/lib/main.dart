@@ -5,6 +5,8 @@ import 'package:jumprope_core/jumprope_core.dart';
 
 import 'camera_test_page.dart';
 import 'data/pose/camera_pose_source.dart';
+import 'data/session_record.dart';
+import 'data/session_saver.dart';
 import 'skeleton_painter.dart';
 import 'voice_service.dart';
 import 'data/pose/mediapipe_landmarker.dart';
@@ -58,6 +60,9 @@ class _HomePageState extends State<HomePage> {
 
   SessionController? _controller;
   CameraPoseSource? _source;
+  final _saver = SessionSaver();
+  DateTime? _sessionStartedAt;
+  String? _savedSessionId;
   StreamSubscription<PoseFrame>? _lmSub;
   final ValueNotifier<PoseFrame?> _poseVN = ValueNotifier(null);
   final VoiceService _voice = VoiceService();
@@ -100,12 +105,15 @@ class _HomePageState extends State<HomePage> {
           }
         });
       } else if (s.phase == SessionPhase.running) {
+        _sessionStartedAt = DateTime.now();
+        _savedSessionId = null;
         _voice.resetCount();
         _voice.say('开始');
       } else if (s.phase == SessionPhase.paused) {
         _voice.say('已暂停');
       } else if (s.phase == SessionPhase.finished) {
         _voice.say('时间到，共 ${s.count} 次');
+        unawaited(_persistSession());
       }
     }
 
@@ -117,6 +125,30 @@ class _HomePageState extends State<HomePage> {
     }
 
     if (mounted) setState(() => _state = s);
+  }
+
+  /// 会话结束写一条记录（只写一次；详情页/统计都从库里算）。
+  Future<void> _persistSession() async {
+    final result = _controller?.result;
+    final started = _sessionStartedAt;
+    if (result == null || started == null) return;
+
+    final ended = DateTime.now();
+    final id = 's-${started.millisecondsSinceEpoch}'
+        '-${ended.millisecondsSinceEpoch}';
+    if (_savedSessionId == id) return;
+    _savedSessionId = id;
+
+    try {
+      await _saver.save(
+        result: result,
+        startedAt: started,
+        endedAt: ended,
+        mode: sessionModeForDuration(_durationSec),
+      );
+    } catch (e) {
+      if (mounted) setState(() => _error = '保存失败: $e');
+    }
   }
 
   Future<void> _loadDiag() async {
