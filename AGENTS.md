@@ -16,7 +16,8 @@ Web 版（H5）  = 算法实验台，长期保留，调参主战场
 Flutter 版    = 最终产品，仅 Android
 ```
 
-当前阶段：**数据层 v1 + 相机验证 App**。算法验证继续；正式 UI 还没接（设计稿已出）。
+当前阶段：**数据层 v1 + 正式 UI v0**（首页/结果/记录/我的，读库闭环）。
+算法验证继续；档案编辑、月历、live 页视觉还没做。
 签名已固定为公开 dev key，CI 构建可覆盖升级；正式发布前要换私有 release key。
 
 文档：
@@ -59,7 +60,14 @@ Flutter 版    = 最终产品，仅 Android
 │   └── test/all_tests.dart      ★ 全部单元测试（51 项）
 │
 ├── flutter_app/                 Flutter 外壳
-│   ├── lib/main.dart            相机验证主界面（570 行，非正式 UI）
+│   ├── lib/main.dart            入口（正式 App / CAMERA_TEST）
+│   ├── lib/live_page.dart       计数页（相机 + 大数字 + 结束）
+│   ├── lib/app/                 ★ 正式 UI（首页/结果/记录/我的）
+│   │   ├── home_page.dart       首页（目标环 + 开始）
+│   │   ├── result_page.dart     结果页（表盘/统计/节奏）
+│   │   ├── history_page.dart    记录列表
+│   │   ├── profile_page.dart    我的（只读）
+│   │   └── theme.dart / ui.dart 设计稿色板与通用组件
 │   ├── lib/data/                ★ 本地数据层（SQLite v1）
 │   │   ├── app_database.dart    建表/迁移/DAO
 │   │   ├── data_repository.dart 门面 + 导入导出
