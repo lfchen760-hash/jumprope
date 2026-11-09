@@ -81,7 +81,7 @@ void main() {
     expect(s.segments(), [1, 3, 0, 0]);
     expect(s.avgPerMinute, 6);
     final copy = SessionRecord.fromMap(s.toMap());
-    expect(copy.jumps, [1000, 11000, 12000, 25000]);
+    expect(copy.jumps, [1000, 11000, 11200, 11300]);
     expect(copy.localDate, '2026-11-09');
     expect(copy.mode, SessionMode.timed60);
   });
