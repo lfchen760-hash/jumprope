@@ -1,0 +1,280 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
+
+import 'app_settings.dart';
+import 'child_profile.dart';
+import 'date_utils.dart';
+import 'goal_entry.dart';
+import 'session_record.dart';
+
+/// 本地 SQLite。schema v1；以后只加不删，迁移前备份。
+class AppDatabase {
+  AppDatabase._();
+
+  static final AppDatabase instance = AppDatabase._();
+
+  static const int schemaVersion = 1;
+  static const String settingsKey = 'app_settings_v1';
+
+  static const String tableProfile = 'profile';
+  static const String tableSessions = 'sessions';
+  static const String tableGoals = 'goal_history';
+  static const String tableSettings = 'settings';
+
+  static const String _dbName = 'jumprope.db';
+
+  Future<Database>? _openFuture;
+  String? _path;
+
+  Future<Database> get database => _openFuture ??= _open();
+
+  Future<Database> _open() async {
+    final dir = await getDatabasesPath();
+    _path = p.join(dir, _dbName);
+    return openDatabase(
+      _path!,
+      version: schemaVersion,
+      onConfigure: (db) async {
+        final old =
+            Sqflite.firstIntValue(await db.rawQuery('PRAGMA user_version')) ??
+            0;
+        if (old > 0 && old < schemaVersion && _path != null) {
+          final f = File(_path!);
+          if (await f.exists()) {
+            await f.copy('${_path!}.bak-v$old');
+          }
+        }
+      },
+      onCreate: (db, version) async {
+        final b = db.batch();
+        b.execute('''
+          CREATE TABLE $tableProfile (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            nickname TEXT NOT NULL,
+            birth_year INTEGER,
+            grade INTEGER,
+            gender TEXT NOT NULL DEFAULT 'unspecified',
+            show_benchmark INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER,
+            updated_at INTEGER
+          )
+        ''');
+        b.execute('''
+          CREATE TABLE $tableSessions (
+            id TEXT PRIMARY KEY,
+            started_at_utc INTEGER NOT NULL,
+            ended_at_utc INTEGER,
+            local_date TEXT NOT NULL,
+            tz_offset_min INTEGER NOT NULL,
+            mode TEXT NOT NULL,
+            source TEXT NOT NULL,
+            count INTEGER NOT NULL,
+            active_ms INTEGER NOT NULL,
+            jumps_json TEXT NOT NULL,
+            valid INTEGER NOT NULL DEFAULT 1,
+            invalid_reasons_json TEXT,
+            grade_at_session INTEGER,
+            gender_at_session TEXT,
+            standard_version TEXT,
+            algo_version TEXT,
+            app_version TEXT,
+            created_at INTEGER NOT NULL
+          )
+        ''');
+        b.execute(
+          'CREATE INDEX idx_sessions_date ON $tableSessions(local_date)',
+        );
+        b.execute(
+          'CREATE INDEX idx_sessions_started ON $tableSessions(started_at_utc)',
+        );
+        b.execute('''
+          CREATE TABLE $tableGoals (
+            effective_from TEXT PRIMARY KEY,
+            daily_goal INTEGER NOT NULL,
+            created_at INTEGER NOT NULL
+          )
+        ''');
+        b.execute('''
+          CREATE TABLE $tableSettings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+          )
+        ''');
+        await b.commit(noResult: true);
+
+        await db.insert(
+          tableGoals,
+          GoalEntry(
+            effectiveFrom: todayLocalDate(),
+            dailyGoal: 300,
+            createdAtMs: DateTime.now().millisecondsSinceEpoch,
+          ).toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        // v1 是初始版本。以后按版本号追加 ALTER/CREATE，只加不删。
+        // if (oldVersion < 2) { ... }
+      },
+      onDowngrade: (db, oldVersion, newVersion) async {
+        throw StateError('数据库版本 $oldVersion 高于当前 App 支持的 $newVersion，请升级 App');
+      },
+    );
+  }
+
+  Future<ChildProfile?> loadProfile() async {
+    final db = await database;
+    final rows = await db.query(tableProfile, limit: 1);
+    if (rows.isEmpty) return null;
+    return ChildProfile.fromMap(rows.first);
+  }
+
+  Future<void> saveProfile(ChildProfile profile) async {
+    final db = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final map = profile.toMap()
+      ..['id'] = 1
+      ..['created_at'] = profile.createdAtMs ?? now
+      ..['updated_at'] = now;
+    await db.insert(
+      tableProfile,
+      map,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> insertSession(SessionRecord session) async {
+    final db = await database;
+    await db.insert(
+      tableSessions,
+      session.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<SessionRecord>> sessionsBetween(String from, String to) async {
+    final db = await database;
+    final rows = await db.query(
+      tableSessions,
+      where: 'local_date >= ? AND local_date <= ?',
+      whereArgs: [from, to],
+      orderBy: 'started_at_utc ASC',
+    );
+    return rows.map(SessionRecord.fromMap).toList();
+  }
+
+  Future<List<SessionRecord>> allSessions() async {
+    final db = await database;
+    final rows = await db.query(tableSessions, orderBy: 'started_at_utc DESC');
+    return rows.map(SessionRecord.fromMap).toList();
+  }
+
+  Future<List<SessionRecord>> recentSessions(int limit) async {
+    final db = await database;
+    final rows = await db.query(
+      tableSessions,
+      orderBy: 'started_at_utc DESC',
+      limit: limit,
+    );
+    return rows.map(SessionRecord.fromMap).toList();
+  }
+
+  Future<void> deleteSession(String id) async {
+    final db = await database;
+    await db.delete(tableSessions, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<GoalEntry>> goalHistory() async {
+    final db = await database;
+    final rows = await db.query(tableGoals, orderBy: 'effective_from ASC');
+    return rows.map(GoalEntry.fromMap).toList();
+  }
+
+  Future<int> goalForDate(String date) async {
+    final db = await database;
+    final rows = await db.query(
+      tableGoals,
+      where: 'effective_from <= ?',
+      whereArgs: [date],
+      orderBy: 'effective_from DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return 300;
+    return (rows.first['daily_goal'] as num).toInt();
+  }
+
+  Future<void> setGoal(String date, int goal) async {
+    final db = await database;
+    await db.insert(
+      tableGoals,
+      GoalEntry(
+        effectiveFrom: date,
+        dailyGoal: goal,
+        createdAtMs: DateTime.now().millisecondsSinceEpoch,
+      ).toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<AppSettings> loadSettings() async {
+    final db = await database;
+    final rows = await db.query(
+      tableSettings,
+      where: 'key = ?',
+      whereArgs: [settingsKey],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      final s = AppSettings.defaults();
+      await saveSettings(s);
+      return s;
+    }
+    try {
+      final raw = rows.first['value'] as String;
+      return AppSettings.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      final s = AppSettings.defaults();
+      await saveSettings(s);
+      return s;
+    }
+  }
+
+  Future<void> saveSettings(AppSettings settings) async {
+    final db = await database;
+    await db.insert(tableSettings, {
+      'key': settingsKey,
+      'value': jsonEncode(settings.toJson()),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> clearAllData() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final t in [
+        tableSessions,
+        tableProfile,
+        tableGoals,
+        tableSettings,
+      ]) {
+        await txn.delete(t);
+      }
+    });
+  }
+
+  Future<T> transaction<T>(Future<T> Function(Transaction txn) action) async {
+    final db = await database;
+    return db.transaction(action);
+  }
+
+  Future<void> close() async {
+    final f = _openFuture;
+    _openFuture = null;
+    if (f != null) {
+      final db = await f;
+      await db.close();
+    }
+  }
+}

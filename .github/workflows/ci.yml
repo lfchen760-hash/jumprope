@@ -45,3 +45,7 @@ jobs:
       - name: 静态分析
         working-directory: flutter_app
         run: flutter analyze
+
+      - name: 数据层单元测试
+        working-directory: flutter_app
+        run: flutter test

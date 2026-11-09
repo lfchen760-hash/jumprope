@@ -3,7 +3,7 @@
 给接手的 agent（或未来的自己）看的操作手册。
 **只写「不看就会踩坑」的东西**，不写代码细节。
 
-最后更新：2026-11-08
+最后更新：2026-11-09
 
 ---
 
@@ -16,11 +16,14 @@ Web 版（H5）  = 算法实验台，长期保留，调参主战场
 Flutter 版    = 最终产品，仅 Android
 ```
 
-当前阶段：**算法验证**。Flutter 只做了 Dart 计数核心，还没有 App。
+当前阶段：**数据层 v1 + 相机验证 App**。算法验证继续；正式 UI 还没接（设计稿已出）。
+签名已固定为公开 dev key，CI 构建可覆盖升级；正式发布前要换私有 release key。
 
 文档：
 - `docs/跳绳AI计数产品方案.md` —— 产品与技术方案
 - `docs/Flutter迁移计划.md` —— 迁移计划 v3
+- `docs/项目进展.md` —— 当前进度/下一步
+- `design/storage-schema.md`、`design/data-logic.md` —— 数据要存什么、每个数字怎么算
 
 ---
 
@@ -54,10 +57,21 @@ Flutter 版    = 最终产品，仅 Android
 │   ├── verify.dart              跑黄金向量验证
 │   └── test/all_tests.dart      ★ 全部单元测试（24 项）
 │
-├── flutter_app/                 Flutter 外壳（未编译验证）
+├── flutter_app/                 Flutter 外壳
+│   ├── lib/main.dart            相机验证主界面（570 行，非正式 UI）
+│   ├── lib/data/                ★ 本地数据层（SQLite v1）
+│   │   ├── app_database.dart    建表/迁移/DAO
+│   │   ├── data_repository.dart 门面 + 导入导出
+│   │   ├── session_record.dart  会话（逐跳时间戳）
+│   │   ├── child_profile.dart   孩子档案
+│   │   ├── jump_benchmark.dart  2014 国标阈值表
+│   │   └── period_stats.dart    日/周/月/年统计
+│   ├── test/data_layer_test.dart 数据层纯逻辑测试
 │   ├── lib/data/pose/           通道封装 + 两个 PoseSource
 │   └── android/.../com/jumprope/  PosePlugin / PoseProcessor / CameraStream
 │
+├── ci/android/                  DEV 签名（公开，见 §5.5）
+├── design/                      UI 稿、数据口径、存储 schema
 ├── video/                       三个校准视频（标注在文件名里）
 └── docs/
 ```
@@ -214,6 +228,37 @@ MOVE_X_MAX=0.25  TILT_MAX=35   KNEE_MIN=100
 
 ---
 
+## 5.5 数据层与签名（v1）
+
+### 数据层（`flutter_app/lib/data/`）
+
+- SQLite 库 `jumprope.db`，`schemaVersion = 1`；表：`profile` / `sessions` /
+  `goal_history` / `settings`。
+- **只存事实**：档案、每次会话（含 `jumps_json` 逐跳 offset）、目标历史、设置。
+- **不存派生**：日/周/月/年总数、连续天数、个人最好、参考线状态、日历颜色，
+  全部从会话算；避免两套数字打架。
+- 会话存 `grade_at_session` / `gender_at_session` / `standard_version` 快照；
+  2014 国标阈值表在 `jump_benchmark.dart`，不按用户复制。
+- 迁移：`PRAGMA user_version`；只加不删；迁移前备份 `.bak-vN`；不要
+  `DROP TABLE` / 删库重建。当前 v1，还没有 v2。
+- 导入/导出：`ExportBundle`（JSON，含 schemaVersion）；导入前先导出一份
+  backup；整体替换用 `replace: true`。
+- 数据层测试：`flutter_app/test/data_layer_test.dart`（纯逻辑，不碰 sqflite）。
+  CI 会跑 `flutter test`。
+
+### 签名（DEV ONLY，已落地）
+
+- `ci/android/dev-upload-keystore.p12` + `dev-keystore.properties` 提交在仓库里，
+  **密码也是公开的**。这是为了不改 GitHub Secrets、保证 CI 每次同一证书。
+- 证书 SHA-256：
+  `F2:5A:84:D5:38:58:4A:F8:A1:9F:48:46:C1:69:CD:6E:54:9F:70:E3:A7:20:7C:C4:E5:04:0F:12:EA:36:67:A4`
+- CI 构建后 `apksigner` 校验该指纹；不一致直接失败。
+- `versionCode` 用 `github.run_number` 自增；`applicationId` 是
+  `com.jumprope.jumprope_app`，**不要改**，改了就是另一个 App，数据不继承。
+- 旧 debug 包（每次证书不同）需要卸载一次；从 dev key 这版起可以覆盖升级。
+- 正式发布前换私有 release key（届时老用户需卸载一次）；不要把 release key
+  提交到公开仓库。
+
 ## 6. 踩过的坑
 
 ### 浏览器缓存
@@ -297,6 +342,10 @@ Rename failed ... Invalid cross-device link (errno 18)
 - ❌ 用 `pkill -f "node server.js"`
 - ❌ 索要或使用用户的 GitHub 密码（需要时用 Deploy Key 或细粒度 PAT）
 - ❌ 把「模型输出一致」当成理所当然 —— 必须用离线 video 模式量化
+- ❌ 把视频/原始帧/逐帧关键点写进数据库（隐私 + 体积）
+- ❌ 在数据库里存日/周/月总数、连续天数等派生值（读时算）
+- ❌ 随手改 `applicationId` 或签名 key（会丢数据/无法升级）
+- ❌ 正式发布继续用公开 dev key；也不要提交私有 release key
 
 ---
 
@@ -348,6 +397,8 @@ rsync -a --exclude node_modules --exclude '.git' --exclude '*.log' --exclude '*.
   /root/dsh/test/jumprope/ ./jumprope/
 rsync -a --exclude '.dart_tool' --exclude '.packages' --exclude 'pubspec.lock' \
   /root/dsh/test/dart_core/ ./dart_core/
+rsync -a --exclude 'build' --exclude '.dart_tool' --exclude 'pubspec.lock' \
+  /root/dsh/test/flutter_app/ ./flutter_app/
 cp /root/dsh/test/AGENTS.md .
 cp /root/dsh/test/docs/*.md ./docs/
 git add -A && git commit -m "..." && git push
@@ -378,14 +429,14 @@ git add -A && git commit -m "..." && git push
 
 | 工作流 | 触发 | 内容 |
 |---|---|---|
-| `.github/workflows/ci.yml` | push / PR | Dart 核心测试 + Flutter analyze |
-| `.github/workflows/android-build.yml` | 手动 | 生成脚手架 → 构建 APK（实验性） |
+| `.github/workflows/ci.yml` | push / PR | Dart 核心测试 + Flutter analyze + 数据层 `flutter test` |
+| `.github/workflows/android-build.yml` | push（flutter/.github 变更）/ 手动 | 生成脚手架 → 固定 DEV 签名 → 校验证书 → 构建 APK |
 
 **本地等价命令**（CI 会跑同样的东西）：
 
 ```bash
 cd dart_core && dart analyze && dart run test/all_tests.dart
-cd flutter_app && flutter pub get && flutter analyze
+cd flutter_app && flutter pub get && flutter analyze && flutter test
 ```
 
 **android-build 的已知风险**：`flutter create` 模板随版本变化，

@@ -15,6 +15,9 @@ dependencies:
     path: ../dart_core
   # 语音与音效（P3 用）
   flutter_tts: ^4.0.2
+  # 本地数据层
+  sqflite: ^2.3.3
+  path: ^1.9.0
 
 dev_dependencies:
   flutter_test:
