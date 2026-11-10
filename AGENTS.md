@@ -62,6 +62,7 @@ Flutter 版    = 最终产品，仅 Android
 ├── flutter_app/                 Flutter 外壳
 │   ├── lib/main.dart            入口（正式 App / CAMERA_TEST）
 │   ├── lib/live_page.dart       计数页（按 mock-live：计时/大数字/进度/暂停）
+│   ├── lib/tick_player.dart     每跳音效通道（原生 SoundPool）
 │   ├── lib/app/                 ★ 正式 UI（首页/结果/记录/我的）
 │   │   ├── home_page.dart       首页（目标环 + 开始）
 │   │   ├── result_page.dart     结果页（表盘/统计/节奏）
@@ -80,6 +81,7 @@ Flutter 版    = 最终产品，仅 Android
 │   ├── test/data_layer_test.dart 数据层纯逻辑测试
 │   ├── lib/data/pose/           通道封装 + 两个 PoseSource
 │   └── android/.../com/jumprope/  PosePlugin / PoseProcessor / CameraStream
+│       android/.../res/raw/      tick_low.wav / tick_high.wav
 │
 ├── ci/android/                  DEV 签名（公开，见 §5.5）
 ├── design/                      UI 稿、数据口径、存储 schema
@@ -325,6 +327,21 @@ const post = postureOf(toLm(lm));
 ```
 
 判断有没有踩：抽查黄金向量里 `tilt` 是否全为 0。全 0 就是踩了。
+
+### release 构建会压掉「动态引用」的 res/raw
+
+音效资源一开始用 `resources.getIdentifier("tick_low","raw",packageName)` 加载，
+release 构建的资源压缩不认这种动态引用，**wav 直接被删掉，APK 里只剩代码**，
+表现就是「计数正常但完全没声音」。
+
+解决：Kotlin 里写静态引用 `R.raw.tick_low`（可再加 `res/raw/keep.xml` 的
+`tools:keep`）。验证方式：
+
+```bash
+unzip -l app-release.apk | grep wav   # 必须能看到 res/*.wav
+```
+
+改完音效务必解包确认，不要只看「编译通过」。
 
 ### dart pub get 用不了
 
