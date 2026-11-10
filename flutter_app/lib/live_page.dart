@@ -5,6 +5,7 @@ import 'package:jumprope_core/jumprope_core.dart';
 
 import 'app/result_page.dart';
 import 'build_info.dart';
+import 'data/data_repository.dart';
 import 'data/pose/camera_pose_source.dart';
 import 'data/pose/mediapipe_landmarker.dart';
 import 'data/session_record.dart';
@@ -12,9 +13,10 @@ import 'data/session_saver.dart';
 import 'skeleton_painter.dart';
 import 'voice_service.dart';
 
-/// 计数页：相机预览 + 骨架 + 大数字 + 暂停/结束。
+/// 计数页：相机预览 + 骨架 + 大数字 + 计时/节奏。
 ///
 /// 从首页带着时长进来，进页面自动启动；结束后自动落库并跳到结果页。
+/// 视觉按 `design/mock-live.png`：顶部计时、下半屏大数字、底部进度和暂停。
 class LivePage extends StatefulWidget {
   const LivePage({
     super.key,
@@ -37,6 +39,7 @@ class LivePage extends StatefulWidget {
 class _LivePageState extends State<LivePage> {
   final _landmarker = MediaPipeLandmarker();
   final _saver = SessionSaver();
+  final _repo = DataRepository();
   final _voice = VoiceService();
 
   SessionController? _controller;
@@ -50,11 +53,10 @@ class _LivePageState extends State<LivePage> {
   String? _error;
   String _diag = '';
   bool _showDiag = false;
+  int _textureId = -1;
 
   DateTime? _sessionStartedAt;
   bool _handledFinish = false;
-
-  int _textureId = -1;
 
   bool get _active =>
       _state.phase == SessionPhase.running ||
@@ -169,27 +171,51 @@ class _LivePageState extends State<LivePage> {
   }
 
   Future<void> _confirmClose() async {
-    if (_active) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('结束本次训练？'),
-          content: const Text('当前成绩不会保存。'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('继续跳'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('结束'),
-            ),
-          ],
-        ),
-      );
-      if (ok != true) return;
+    if (_state.phase == SessionPhase.finished) return;
+    if (!_active) {
+      await _leave();
+      return;
     }
-    await _leave();
+
+    final canSave =
+        _state.phase == SessionPhase.running ||
+        _state.phase == SessionPhase.paused;
+
+    // 弹窗期间先停表，避免「继续跳」回来发现白走几秒
+    final wasRunning = _state.phase == SessionPhase.running;
+    if (wasRunning) _controller?.pause();
+
+    final action = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('结束本次训练？'),
+        content: Text(canSave ? '结束会保存当前成绩，放弃则不保存。' : '当前还没有开始计数。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('继续跳'),
+          ),
+          if (canSave)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'save'),
+              child: const Text('结束并保存'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'discard'),
+            child: Text('放弃', style: TextStyle(color: Colors.red.shade700)),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'save') {
+      _finishEarly();
+    } else if (action == 'discard') {
+      await _leave();
+    } else if (wasRunning) {
+      _controller?.resume();
+    }
   }
 
   Future<void> _loadDiag() async {
@@ -224,6 +250,12 @@ class _LivePageState extends State<LivePage> {
     });
 
     try {
+      try {
+        final settings = await _repo.loadSettings();
+        _voice.enabled = settings.voiceEnabled;
+      } catch (_) {
+        // 读设置失败不影响计数，用默认语音开
+      }
       await _voice.init();
       await _landmarker.init();
       _textureId = await _landmarker.getPreviewTextureId();
@@ -257,7 +289,7 @@ class _LivePageState extends State<LivePage> {
     }
   }
 
-  Future<void> _togglePause() async {
+  void _togglePause() {
     final c = _controller;
     if (c == null) return;
     if (_state.phase == SessionPhase.paused) {
@@ -267,15 +299,28 @@ class _LivePageState extends State<LivePage> {
     }
   }
 
+  void _toggleVoice() {
+    setState(() => _voice.enabled = !_voice.enabled);
+    if (!_voice.enabled) unawaited(_voice.stop());
+    unawaited(_persistVoice());
+  }
+
+  Future<void> _persistVoice() async {
+    try {
+      final settings = await _repo.loadSettings();
+      await _repo.saveSettings(settings.copyWith(voiceEnabled: _voice.enabled));
+    } catch (_) {
+      // 设置保存失败不影响本次计数
+    }
+  }
+
   void _finishEarly() {
     final c = _controller;
-    if (c == null) return;
-    if (_state.phase == SessionPhase.running ||
-        _state.phase == SessionPhase.paused) {
-      c.finishEarly();
-    } else {
-      _confirmClose();
+    if (c == null) {
+      unawaited(_leave());
+      return;
     }
+    c.finishEarly();
   }
 
   Future<void> _flip() async {
@@ -312,16 +357,19 @@ class _LivePageState extends State<LivePage> {
     super.dispose();
   }
 
-  String get _phaseText {
+  /// 顶部状态文案：就位 / 出框 / 走动 / 弯腰 / 暂停。
+  String get _statusText {
     switch (_state.phase) {
       case SessionPhase.idle:
-        return _error == null ? '正在启动相机…' : '相机启动失败';
+        return '正在启动相机…';
       case SessionPhase.positioning:
-        return _state.framing.ok ? '就位了，准备开始' : _state.framing.message;
+        return _state.framing.ok ? '已就位 · 全身入镜' : _state.framing.message;
       case SessionPhase.countdown:
         return '准备…';
       case SessionPhase.running:
-        return '跳吧！';
+        if (_state.gate == 'move') return '检测到走动，暂停计数';
+        if (_state.gate == 'bend') return '检测到弯腰，暂停计数';
+        return '已就位 · 全身入镜';
       case SessionPhase.paused:
         return '已暂停';
       case SessionPhase.finished:
@@ -329,10 +377,35 @@ class _LivePageState extends State<LivePage> {
     }
   }
 
+  bool get _statusWarn {
+    if (_state.phase == SessionPhase.positioning) return !_state.framing.ok;
+    if (_state.phase == SessionPhase.running) return _state.gate != 'ok';
+    return _error != null;
+  }
+
+  String _clockFor(int ms) {
+    final total = (ms / 1000).round().clamp(0, 24 * 3600).toInt();
+    final m = (total ~/ 60).toString().padLeft(2, '0');
+    final s = (total % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
   @override
   Widget build(BuildContext context) {
     final idle = _state.phase == SessionPhase.idle;
     final finished = _state.phase == SessionPhase.finished;
+    final active = !idle && !finished;
+
+    final timed = widget.durationSec > 0;
+    final progress = timed && _state.activeMs > 0
+        ? (_state.activeMs / (widget.durationSec * 1000))
+              .clamp(0.0, 1.0)
+              .toDouble()
+        : 0.0;
+    final remainSec = (_state.remainingMs / 1000).ceil();
+    final avg = _state.activeMs >= 3000 && _state.count > 0
+        ? (_state.count * 60000 / _state.activeMs).round()
+        : null;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -365,7 +438,7 @@ class _LivePageState extends State<LivePage> {
                   padding: const EdgeInsets.fromLTRB(14, 44, 14, 14),
                   child: SingleChildScrollView(
                     child: SelectableText(
-                      _diag.isEmpty ? '（点角标获取）' : _diag,
+                      _diag.isEmpty ? '（长按状态条获取）' : _diag,
                       style: const TextStyle(
                         fontSize: 11,
                         height: 1.5,
@@ -378,11 +451,12 @@ class _LivePageState extends State<LivePage> {
               ),
             ),
 
+          // 上下压暗，保证白字可读
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            height: 320,
+            height: 220,
             child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -390,7 +464,27 @@ class _LivePageState extends State<LivePage> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.black.withValues(alpha: 0.72),
+                      Colors.black.withValues(alpha: 0.55),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 420,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.62),
                       Colors.transparent,
                     ],
                   ),
@@ -402,90 +496,28 @@ class _LivePageState extends State<LivePage> {
           SafeArea(
             child: Column(
               children: [
-                Row(
-                  children: [
-                    const SizedBox(width: 12),
-                    GestureDetector(
-                      onTap: _loadDiag,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.45),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          'v$kBuildId',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontFamily: 'monospace',
-                            color: Colors.white.withValues(alpha: 0.7),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: _confirmClose,
-                      icon: Icon(
-                        Icons.close,
-                        color: Colors.white.withValues(alpha: 0.85),
-                      ),
-                    ),
-                  ],
-                ),
-                if (!idle && !finished) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    '${_state.count}',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 104,
-                      fontWeight: FontWeight.w800,
-                      height: 1,
-                      color: Colors.white,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                      shadows: [Shadow(blurRadius: 24, color: Colors.black87)],
-                    ),
-                  ),
-                  Text(
-                    '次',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.white.withValues(alpha: 0.7),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _pill(
-                    widget.durationSec > 0
-                        ? '剩余 ${(_state.remainingMs / 1000).ceil()} 秒'
-                        : '自由跳',
-                  ),
-                  const SizedBox(height: 8),
-                  _pill(_phaseText, warn: _active && !_state.framing.ok),
-                  if (_active && (_source?.frameCount ?? 0) == 0) ...[
+                _topBar(),
+                if (active) ...[
+                  const SizedBox(height: 10),
+                  GestureDetector(onLongPress: _loadDiag, child: _statusPill()),
+                  if ((_source?.frameCount ?? 0) == 0) ...[
                     const SizedBox(height: 8),
-                    _pill('相机没有输出画面（权限或初始化失败）', warn: true),
+                    _hintPill('相机没有输出画面（权限或初始化失败）'),
                   ],
-                  if (_state.gate != 'ok') ...[
+                  if (_error != null) ...[
                     const SizedBox(height: 8),
-                    _pill(
-                      _state.gate == 'move' ? '检测到走动，暂停计数' : '检测到弯腰，暂停计数',
-                      warn: true,
-                    ),
+                    _hintPill('相机错误：$_error'),
                   ],
                 ],
                 if (idle && _error == null) ...[
                   const Spacer(),
                   const CircularProgressIndicator(color: Colors.white),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   Text(
                     '正在启动相机…',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7),
                       fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.75),
                     ),
                   ),
                   const Spacer(),
@@ -493,17 +525,20 @@ class _LivePageState extends State<LivePage> {
                 if (finished) ...[
                   const Spacer(),
                   const CircularProgressIndicator(color: Colors.white),
-                  const SizedBox(height: 16),
-                  const Text(
+                  const SizedBox(height: 14),
+                  Text(
                     '正在生成结果…',
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.75),
+                    ),
                   ),
                   const Spacer(),
                 ],
-                if (_error != null) ...[
-                  const SizedBox(height: 14),
+                if (_error != null && !active) ...[
+                  const Spacer(),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    padding: const EdgeInsets.symmetric(horizontal: 28),
                     child: Text(
                       _error!,
                       textAlign: TextAlign.center,
@@ -514,42 +549,173 @@ class _LivePageState extends State<LivePage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 14),
                   Wrap(
-                    spacing: 8,
+                    spacing: 10,
                     children: [
-                      FilledButton(onPressed: _start, child: const Text('重试')),
+                      FilledButton(
+                        onPressed: _start,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black87,
+                        ),
+                        child: const Text('重试'),
+                      ),
                       TextButton(
                         onPressed: _leave,
-                        child: const Text(
+                        child: Text(
                           '返回',
-                          style: TextStyle(color: Colors.white70),
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.75),
+                          ),
                         ),
                       ),
                     ],
                   ),
+                  const Spacer(),
                 ],
-                const Spacer(),
-                if (!idle && !finished)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 18),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _ctrlBtn(
-                            _state.phase == SessionPhase.paused ? '继续' : '暂停',
-                            _togglePause,
+                if (active) ...[
+                  const Spacer(),
+                  Text(
+                    '当前次数',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.7),
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${_state.count}',
+                        style: const TextStyle(
+                          fontSize: 104,
+                          fontWeight: FontWeight.w800,
+                          height: 0.95,
+                          color: Colors.white,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                          shadows: [
+                            Shadow(blurRadius: 26, color: Colors.black54),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 6, bottom: 16),
+                        child: Text(
+                          '次',
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: Colors.white.withValues(alpha: 0.75),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(child: _ctrlBtn('翻转', _flip)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _ctrlBtn('结束', _finishEarly, primary: true),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    avg == null ? '平均 — 次/分' : '平均 $avg 次/分',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white.withValues(alpha: 0.78),
+                    ),
+                  ),
+                  const Spacer(),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      children: [
+                        if (timed) ...[
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(999),
+                            child: SizedBox(
+                              height: 6,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  ColoredBox(
+                                    color: Colors.white.withValues(alpha: 0.25),
+                                  ),
+                                  FractionallySizedBox(
+                                    alignment: Alignment.centerLeft,
+                                    widthFactor: progress,
+                                    child: const DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            Color(0xFFFF8A1F),
+                                            Color(0xFFFF2D6B),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        Row(
+                          children: [
+                            Text(
+                              _clockFor(_state.activeMs),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              timed ? '剩余 $remainSec 秒' : '自由跳',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.white.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
+                  const SizedBox(height: 18),
+                  GestureDetector(
+                    onTap: _togglePause,
+                    child: Container(
+                      width: 68,
+                      height: 68,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black.withValues(alpha: 0.28),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Icon(
+                        _state.phase == SessionPhase.paused
+                            ? Icons.play_arrow_rounded
+                            : Icons.pause_rounded,
+                        size: 36,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _state.phase == SessionPhase.paused ? '继续' : '暂停',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                ],
               ],
             ),
           ),
@@ -558,41 +724,144 @@ class _LivePageState extends State<LivePage> {
     );
   }
 
-  Widget _ctrlBtn(String label, VoidCallback onTap, {bool primary = false}) {
-    return SizedBox(
-      height: 52,
-      child: FilledButton(
-        onPressed: onTap,
-        style: FilledButton.styleFrom(
-          padding: EdgeInsets.zero,
-          backgroundColor: primary
-              ? Colors.blueAccent
-              : Colors.white.withValues(alpha: 0.14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+  Widget _topBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+      child: Row(
+        children: [
+          _circleButton(
+            icon: Icons.close_rounded,
+            onTap: _confirmClose,
+            tooltip: '结束',
           ),
-        ),
-        child: Text(label, style: const TextStyle(fontSize: 15)),
+          Expanded(
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.42),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.16),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.timer_outlined,
+                      size: 14,
+                      color: Colors.white.withValues(alpha: 0.75),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _clockFor(
+                        _state.phase == SessionPhase.idle
+                            ? widget.durationSec * 1000
+                            : widget.durationSec > 0
+                            ? _state.remainingMs
+                            : _state.activeMs,
+                      ),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: Colors.white,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          _circleButton(
+            icon: Icons.cameraswitch_outlined,
+            onTap: _flip,
+            tooltip: '翻转',
+          ),
+          const SizedBox(width: 6),
+          _circleButton(
+            icon: _voice.enabled
+                ? Icons.volume_up_rounded
+                : Icons.volume_off_rounded,
+            onTap: _toggleVoice,
+            tooltip: _voice.enabled ? '关闭语音' : '打开语音',
+          ),
+        ],
       ),
     );
   }
 
-  Widget _pill(String text, {bool warn = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: warn ? Colors.amber.withValues(alpha: 0.7) : Colors.white24,
+  Widget _circleButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required String tooltip,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.black.withValues(alpha: 0.4),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+          ),
+          child: Icon(icon, size: 22, color: Colors.white),
         ),
+      ),
+    );
+  }
+
+  Widget _statusPill() {
+    final warn = _statusWarn;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: warn ? const Color(0xFFE89634) : const Color(0xFF1EAA69),
+            ),
+          ),
+          const SizedBox(width: 7),
+          Text(
+            _statusText,
+            style: TextStyle(
+              fontSize: 12,
+              color: warn ? const Color(0xFFFFC266) : Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _hintPill(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.amber.withValues(alpha: 0.6)),
       ),
       child: Text(
         text,
-        style: TextStyle(
-          fontSize: 14,
-          color: warn ? Colors.amber : Colors.white,
-        ),
+        style: const TextStyle(fontSize: 12, color: Colors.amber),
       ),
     );
   }
