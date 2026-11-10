@@ -13,6 +13,7 @@ import io.flutter.view.TextureRegistry
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
+import com.jumprope.jumprope_app.R
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -102,8 +103,9 @@ class PosePlugin :
                     .build()
             )
             .build()
-        tickLowId = loadRaw("tick_low")
-        tickHighId = loadRaw("tick_high")
+        // 直接引用 R：静态引用能避免 release 资源压缩把 wav 删掉
+        tickLowId = soundPool?.load(context, R.raw.tick_low, 1) ?: 0
+        tickHighId = soundPool?.load(context, R.raw.tick_high, 1) ?: 0
         soundChannel = MethodChannel(binding.binaryMessenger, "com.jumprope/sound").also {
             it.setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -168,12 +170,6 @@ class PosePlugin :
 
     override fun onCancel(arguments: Any?) {
         sink = null
-    }
-
-    private fun loadRaw(name: String): Int {
-        val pool = soundPool ?: return 0
-        val id = context.resources.getIdentifier(name, "raw", context.packageName)
-        return if (id == 0) 0 else pool.load(context, id, 1)
     }
 
     private fun emit(timestampMs: Long, landmarks: FloatArray?) {
