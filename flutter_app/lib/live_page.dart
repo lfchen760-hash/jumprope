@@ -11,6 +11,7 @@ import 'data/pose/mediapipe_landmarker.dart';
 import 'data/session_record.dart';
 import 'data/session_saver.dart';
 import 'skeleton_painter.dart';
+import 'tick_player.dart';
 import 'voice_service.dart';
 
 /// 计数页：相机预览 + 骨架 + 大数字 + 计时/节奏。
@@ -41,6 +42,7 @@ class _LivePageState extends State<LivePage> {
   final _saver = SessionSaver();
   final _repo = DataRepository();
   final _voice = VoiceService();
+  final _tick = TickPlayer();
 
   SessionController? _controller;
   CameraPoseSource? _source;
@@ -57,6 +59,7 @@ class _LivePageState extends State<LivePage> {
 
   DateTime? _sessionStartedAt;
   bool _handledFinish = false;
+  int _lastSoundCount = 0;
 
   bool get _active =>
       _state.phase == SessionPhase.running ||
@@ -76,27 +79,33 @@ class _LivePageState extends State<LivePage> {
     if (s.phase != prev) {
       _countdownTimer?.cancel();
       if (s.phase == SessionPhase.countdown) {
-        _voice.say('准备');
         var n = 3;
+        void announce() {
+          if (!mounted) return;
+          _tick.play(high: n == 1);
+          _voice.say('$n');
+          n--;
+        }
+
+        // 3-2-1：Web 版也是进倒数立刻报 3
+        announce();
         _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-          if (!mounted || _state.phase != SessionPhase.countdown) {
+          if (!mounted || _state.phase != SessionPhase.countdown || n < 1) {
             t.cancel();
             return;
           }
-          if (n > 0) {
-            _voice.say('$n');
-            n--;
-          } else {
-            t.cancel();
-          }
+          announce();
         });
       } else if (s.phase == SessionPhase.running) {
         _sessionStartedAt = DateTime.now();
+        _lastSoundCount = 0;
         _voice.resetCount();
+        _tick.play(high: true);
         _voice.say('开始');
       } else if (s.phase == SessionPhase.paused) {
         _voice.say('已暂停');
       } else if (s.phase == SessionPhase.finished) {
+        _tick.play(high: true);
         _voice.say('时间到，共 ${s.count} 次');
         unawaited(_finishAndShowResult());
       }
@@ -107,6 +116,14 @@ class _LivePageState extends State<LivePage> {
     }
     if (s.phase == SessionPhase.running) {
       _voice.announceCount(s.count);
+    }
+
+    // 每跳一下「嘀」：整十次用高音，和 Web 版 beep(count % 10 === 0) 一致
+    if (s.phase == SessionPhase.running && s.count > _lastSoundCount) {
+      for (var c = _lastSoundCount + 1; c <= s.count; c++) {
+        _tick.play(high: c % 10 == 0);
+      }
+      _lastSoundCount = s.count;
     }
 
     if (mounted) setState(() => _state = s);
@@ -247,6 +264,7 @@ class _LivePageState extends State<LivePage> {
       _error = null;
       _state = SessionState.idle;
       _handledFinish = false;
+      _lastSoundCount = 0;
     });
 
     try {

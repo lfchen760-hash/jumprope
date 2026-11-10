@@ -3,7 +3,9 @@ package com.jumprope
 import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
+import android.media.AudioAttributes
 import android.media.MediaMetadataRetriever
+import android.media.SoundPool
 import android.os.Handler
 import android.os.Looper
 import androidx.lifecycle.LifecycleOwner
@@ -49,6 +51,12 @@ class PosePlugin :
     private var previewChannel: EventChannel? = null
     private var previewSink: EventChannel.EventSink? = null
 
+    // 每跳一下的「嘀」：SoundPool 低延迟，资源是 res/raw/tick_*.wav
+    private var soundChannel: MethodChannel? = null
+    private var soundPool: SoundPool? = null
+    private var tickLowId = 0
+    private var tickHighId = 0
+
     private var processor: PoseProcessor? = null
     private var camera: CameraStreamHandler? = null
     private var surfaceProducer: TextureRegistry.SurfaceProducer? = null
@@ -83,6 +91,34 @@ class PosePlugin :
                 }
             })
         }
+
+        // 音效通道：playTick(high: Boolean)
+        soundPool = SoundPool.Builder()
+            .setMaxStreams(4)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            )
+            .build()
+        tickLowId = loadRaw("tick_low")
+        tickHighId = loadRaw("tick_high")
+        soundChannel = MethodChannel(binding.binaryMessenger, "com.jumprope/sound").also {
+            it.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "playTick" -> {
+                        val high = call.argument<Boolean>("high") ?: false
+                        soundPool?.play(
+                            if (high) tickHighId else tickLowId,
+                            1f, 1f, 1, 0, 1f
+                        )
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -91,6 +127,10 @@ class PosePlugin :
         previewChannel?.setStreamHandler(null)
         previewChannel = null
         previewSink = null
+        soundChannel?.setMethodCallHandler(null)
+        soundChannel = null
+        soundPool?.release()
+        soundPool = null
         channel = null
         eventChannel = null
         camera?.dispose()
@@ -128,6 +168,12 @@ class PosePlugin :
 
     override fun onCancel(arguments: Any?) {
         sink = null
+    }
+
+    private fun loadRaw(name: String): Int {
+        val pool = soundPool ?: return 0
+        val id = context.resources.getIdentifier(name, "raw", context.packageName)
+        return if (id == 0) 0 else pool.load(context, id, 1)
     }
 
     private fun emit(timestampMs: Long, landmarks: FloatArray?) {
