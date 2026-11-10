@@ -17,7 +17,7 @@ Flutter 版    = 最终产品，仅 Android
 ```
 
 当前阶段：**数据层 v1 + 正式 UI v0**（首页/结果/记录/我的，读库闭环）。
-算法验证继续；月历、live 页视觉、出框暂停还没做。
+算法验证继续；月历、出框暂停还没做。
 签名已固定为公开 dev key，CI 构建可覆盖升级；正式发布前要换私有 release key。
 
 文档：
@@ -61,7 +61,7 @@ Flutter 版    = 最终产品，仅 Android
 │
 ├── flutter_app/                 Flutter 外壳
 │   ├── lib/main.dart            入口（正式 App / CAMERA_TEST）
-│   ├── lib/live_page.dart       计数页（相机 + 大数字 + 结束）
+│   ├── lib/live_page.dart       计数页（按 mock-live：计时/大数字/进度/暂停）
 │   ├── lib/app/                 ★ 正式 UI（首页/结果/记录/我的）
 │   │   ├── home_page.dart       首页（目标环 + 开始）
 │   │   ├── result_page.dart     结果页（表盘/统计/节奏）
