@@ -189,7 +189,7 @@ class _LivePageState extends State<LivePage> {
     );
 
     SessionVideo? videoRow;
-    if (recorded != null && recorded.path.isNotEmpty && record != null) {
+    if (recorded != null && recorded.path.isNotEmpty) {
       videoRow = SessionVideo(
         sessionId: record.id,
         rawPath: recorded.path,
