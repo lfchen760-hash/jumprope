@@ -1,0 +1,5 @@
+Analyzing flutter_app...                                        
+
+warning • The operand can't be 'null', so the condition is always 'true'. Remove the condition • lib/live_page.dart:192:64 • unnecessary_null_comparison
+
+1 issue found. (ran in 6.3s)
