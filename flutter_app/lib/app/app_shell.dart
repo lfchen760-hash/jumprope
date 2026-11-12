@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/child_profile.dart';
 import '../data/data_repository.dart';
 import '../data/date_utils.dart';
+import '../data/video_store.dart';
 import 'history_page.dart';
 import 'home_page.dart';
 import 'profile_form_page.dart';
@@ -36,6 +37,10 @@ class _AppShellState extends State<AppShell> {
       final profile = await _repo.loadProfile();
       final settings = await _repo.loadSettings();
       final goal = await _repo.goalForDate(todayLocalDate());
+      // 录像只留 3 天；启动时清一次，失败不影响 App
+      try {
+        await VideoStore(_repo).cleanup();
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _booting = false;

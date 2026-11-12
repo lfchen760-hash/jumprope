@@ -77,6 +77,7 @@ p = sys.argv[1]
 s = open(p, encoding='utf-8').read()
 if 'android.permission.CAMERA' not in s:
     perm = ('    <uses-permission android:name="android.permission.CAMERA" />\n'
+            '    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n'
             '    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />\n')
     s = re.sub(r'(<manifest[^>]*>\n?)', lambda m: m.group(1) + perm, s, count=1)
     open(p, 'w', encoding='utf-8').write(s)

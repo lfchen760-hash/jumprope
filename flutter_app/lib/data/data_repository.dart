@@ -9,6 +9,7 @@ import 'export_bundle.dart';
 import 'goal_entry.dart';
 import 'period_stats.dart';
 import 'session_record.dart';
+import 'session_video.dart';
 
 class ImportResult {
   final int sessions;
@@ -44,7 +45,20 @@ class DataRepository {
       _db.recentSessions(limit);
 
   /// 删除一条会话；日/周/月/年、纪录、连续天数都会随之重算。
+  /// 注意：录像文件要由 `VideoStore` 先删。
   Future<void> deleteSession(String id) => _db.deleteSession(id);
+
+  Future<void> saveVideo(SessionVideo video) => _db.saveVideo(video);
+
+  Future<SessionVideo?> videoForSession(String sessionId) =>
+      _db.videoForSession(sessionId);
+
+  Future<List<SessionVideo>> allVideos() => _db.allVideos();
+
+  Future<void> deleteVideo(String sessionId) => _db.deleteVideo(sessionId);
+
+  Future<List<SessionVideo>> videosBefore(int createdAtMs) =>
+      _db.videosBefore(createdAtMs);
 
   Future<List<GoalEntry>> goalHistory() => _db.goalHistory();
 

@@ -3,8 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../data/session_record.dart';
+import '../data/session_video.dart';
 import 'theme.dart';
 import 'ui.dart';
+import 'video_player_page.dart';
 
 /// 一次训练的结果。传进来的 [record] 已经落库。
 class ResultPage extends StatelessWidget {
@@ -15,6 +17,7 @@ class ResultPage extends StatelessWidget {
     this.previous,
     this.previousBest = 0,
     this.saveError,
+    this.video,
   });
 
   final SessionRecord record;
@@ -24,6 +27,9 @@ class ResultPage extends StatelessWidget {
 
   /// 落库失败时的错误信息；为空表示保存成功。
   final String? saveError;
+
+  /// 本次会话的原始录像；没录则为 null。
+  final SessionVideo? video;
 
   bool get _isRecord => record.valid && record.count > previousBest;
 
@@ -221,6 +227,29 @@ class ResultPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
                   _RhythmCard(segments: segments, activeMs: record.activeMs),
+                  if (video != null) ...[
+                    const SizedBox(height: 14),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => SessionVideoPage(video: video!),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.play_circle_outline, size: 18),
+                      label: const Text('查看原始录像'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.ink,
+                        side: const BorderSide(color: AppColors.line),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '录像保留 3 天',
+                      style: TextStyle(fontSize: 10, color: AppColors.muted),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   GradientButton(
                     label: '再来一组',

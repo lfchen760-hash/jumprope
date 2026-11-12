@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:jumprope_core/jumprope_core.dart';
 
 import 'app/result_page.dart';
@@ -10,6 +12,8 @@ import 'data/pose/camera_pose_source.dart';
 import 'data/pose/mediapipe_landmarker.dart';
 import 'data/session_record.dart';
 import 'data/session_saver.dart';
+import 'data/session_video.dart';
+import 'data/video_recorder.dart';
 import 'skeleton_painter.dart';
 import 'tick_player.dart';
 import 'voice_service.dart';
@@ -43,6 +47,7 @@ class _LivePageState extends State<LivePage> {
   final _repo = DataRepository();
   final _voice = VoiceService();
   final _tick = TickPlayer();
+  final _video = VideoRecorder();
 
   SessionController? _controller;
   CameraPoseSource? _source;
@@ -60,6 +65,14 @@ class _LivePageState extends State<LivePage> {
   DateTime? _sessionStartedAt;
   bool _handledFinish = false;
   int _lastSoundCount = 0;
+
+  // 录像：手动开，最多一段；startOffset 用于把 jumps 映射到视频时间
+  bool _recordRequested = false;
+  bool _recording = false;
+  bool _videoPaused = false;
+  bool _videoStarting = false;
+  int _videoStartOffsetMs = 0;
+  RecordedVideo? _recordedVideo;
 
   bool get _active =>
       _state.phase == SessionPhase.running ||
@@ -116,6 +129,14 @@ class _LivePageState extends State<LivePage> {
     }
     if (s.phase == SessionPhase.running) {
       _voice.announceCount(s.count);
+      if (_recordRequested && !_recording) unawaited(_startVideo());
+      if (_recording && _videoPaused) {
+        _videoPaused = false;
+        unawaited(_video.resume());
+      }
+    } else if (s.phase == SessionPhase.paused && _recording) {
+      _videoPaused = true;
+      unawaited(_video.pause());
     }
 
     // 每跳一下「嘀」：整十次用高音，和 Web 版 beep(count % 10 === 0) 一致
@@ -136,10 +157,13 @@ class _LivePageState extends State<LivePage> {
     final result = _controller?.result;
     final started = _sessionStartedAt;
     if (result == null || started == null || result.activeMs <= 0) {
+      await _stopVideo(discard: true);
       await _leave();
       return;
     }
 
+    // 先停录像，等 native Finalize 拿到文件信息，再落库
+    final recorded = await _stopVideo();
     final ended = DateTime.now();
     SessionRecord? record;
     String? saveError;
@@ -164,6 +188,27 @@ class _LivePageState extends State<LivePage> {
       mode: sessionModeForDuration(widget.durationSec),
     );
 
+    SessionVideo? videoRow;
+    if (recorded != null && recorded.path.isNotEmpty && record != null) {
+      videoRow = SessionVideo(
+        sessionId: record.id,
+        rawPath: recorded.path,
+        startOffsetMs: _videoStartOffsetMs,
+        durationMs: recorded.durationMs,
+        width: recorded.width,
+        height: recorded.height,
+        rotation: recorded.rotation,
+        hasAudio: recorded.hasAudio,
+        sizeBytes: recorded.sizeBytes,
+        createdAtMs: DateTime.now().millisecondsSinceEpoch,
+      );
+      try {
+        await _repo.saveVideo(videoRow);
+      } catch (_) {
+        // 录像元数据失败不影响成绩
+      }
+    }
+
     await _stop();
     if (!mounted) return;
 
@@ -175,6 +220,7 @@ class _LivePageState extends State<LivePage> {
           previous: widget.previous,
           previousBest: widget.previousBest,
           saveError: saveError,
+          video: videoRow,
         ),
       ),
     );
@@ -183,6 +229,7 @@ class _LivePageState extends State<LivePage> {
   }
 
   Future<void> _leave() async {
+    await _stopVideo(discard: true);
     await _stop();
     if (mounted) Navigator.of(context).pop();
   }
@@ -317,6 +364,96 @@ class _LivePageState extends State<LivePage> {
     }
   }
 
+  Future<void> _toggleRecord() async {
+    if (_recording) {
+      await _stopVideo();
+      _recordRequested = false;
+      if (mounted) _snack('已停止录像');
+      return;
+    }
+    if (_recordedVideo != null) {
+      _snack('本次已经录过一段，结束后可在结果页查看');
+      return;
+    }
+    setState(() => _recordRequested = !_recordRequested);
+    if (!_recordRequested) {
+      _snack('已关闭录像');
+      return;
+    }
+    if (_state.phase == SessionPhase.running) {
+      await _startVideo();
+    } else {
+      _snack('已开启录像，开始计数后自动录制');
+    }
+  }
+
+  Future<void> _startVideo() async {
+    if (_recording || _recordedVideo != null || _videoStarting) return;
+    _videoStarting = true;
+    try {
+      final path = await _video.start();
+      if (!mounted) {
+        await _video.stop();
+        return;
+      }
+      if (_state.phase != SessionPhase.running &&
+          _state.phase != SessionPhase.paused) {
+        await _video.stop();
+        return;
+      }
+      if (path == null) {
+        setState(() => _recordRequested = false);
+        _snack('录像启动失败');
+        return;
+      }
+      setState(() {
+        _recording = true;
+        _recordRequested = false;
+        _videoPaused = false;
+        _videoStartOffsetMs = _state.activeMs;
+      });
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      setState(() => _recordRequested = false);
+      _snack('录像启动失败：${e.message ?? e.code}');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _recordRequested = false);
+      _snack('录像启动失败：$e');
+    } finally {
+      _videoStarting = false;
+    }
+  }
+
+  /// 停止录像；discard=true 时把文件删掉（放弃本次训练）。
+  Future<RecordedVideo?> _stopVideo({bool discard = false}) async {
+    var info = _recordedVideo;
+    if (_recording) {
+      try {
+        info = await _video.stop();
+      } catch (_) {
+        info = null;
+      }
+      _recording = false;
+      _videoPaused = false;
+    }
+    _recordedVideo = info;
+    if (discard && info != null) {
+      try {
+        final file = File(info.path);
+        if (await file.exists()) await file.delete();
+      } catch (_) {}
+      _recordedVideo = null;
+    }
+    if (mounted) setState(() {});
+    return _recordedVideo;
+  }
+
+  void _snack(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
   void _toggleVoice() {
     setState(() => _voice.enabled = !_voice.enabled);
     if (!_voice.enabled) unawaited(_voice.stop());
@@ -342,6 +479,10 @@ class _LivePageState extends State<LivePage> {
   }
 
   Future<void> _flip() async {
+    if (_recording) {
+      _snack('录像中不能切换摄像头');
+      return;
+    }
     try {
       await _source?.flip();
       if (mounted) setState(() {});
@@ -365,6 +506,18 @@ class _LivePageState extends State<LivePage> {
 
   @override
   void dispose() {
+    if (_recording) {
+      // 页面被直接销毁（非正常结束）时兜底：停录像并删文件
+      unawaited(
+        _video.stop().then((info) async {
+          if (info == null) return;
+          try {
+            final file = File(info.path);
+            if (await file.exists()) await file.delete();
+          } catch (_) {}
+        }),
+      );
+    }
     _sub?.cancel();
     _lmSub?.cancel();
     _poseVN.dispose();
@@ -752,6 +905,15 @@ class _LivePageState extends State<LivePage> {
             onTap: _confirmClose,
             tooltip: '结束',
           ),
+          const SizedBox(width: 6),
+          _circleButton(
+            icon: _recording
+                ? Icons.stop_circle_outlined
+                : Icons.videocam_outlined,
+            onTap: _toggleRecord,
+            tooltip: _recording ? '停止录像' : '录制本次',
+            color: _recording ? Colors.redAccent : Colors.white,
+          ),
           Expanded(
             child: Center(
               child: Container(
@@ -817,6 +979,7 @@ class _LivePageState extends State<LivePage> {
     required IconData icon,
     required VoidCallback onTap,
     required String tooltip,
+    Color color = Colors.white,
   }) {
     return Tooltip(
       message: tooltip,
@@ -830,7 +993,7 @@ class _LivePageState extends State<LivePage> {
             color: Colors.black.withValues(alpha: 0.4),
             border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
           ),
-          child: Icon(icon, size: 22, color: Colors.white),
+          child: Icon(icon, size: 22, color: color),
         ),
       ),
     );

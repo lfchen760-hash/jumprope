@@ -1,13 +1,20 @@
 package com.jumprope
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.media.AudioAttributes
 import android.media.MediaMetadataRetriever
 import android.media.SoundPool
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import androidx.camera.video.VideoRecordEvent
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import io.flutter.view.TextureRegistry
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -17,6 +24,8 @@ import com.jumprope.jumprope_app.R
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.PluginRegistry
+import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -42,7 +51,8 @@ class PosePlugin :
     FlutterPlugin,
     MethodChannel.MethodCallHandler,
     EventChannel.StreamHandler,
-    ActivityAware {
+    ActivityAware,
+    PluginRegistry.RequestPermissionsResultListener {
 
     private lateinit var context: Context
     private var activity: Activity? = null
@@ -61,6 +71,15 @@ class PosePlugin :
     private var processor: PoseProcessor? = null
     private var camera: CameraStreamHandler? = null
     private var surfaceProducer: TextureRegistry.SurfaceProducer? = null
+
+    // 录像通道：com.jumprope/video
+    private var videoChannel: MethodChannel? = null
+    private var videoEventChannel: EventChannel? = null
+    private var videoSink: EventChannel.EventSink? = null
+    private var activityBinding: ActivityPluginBinding? = null
+    private var pendingStartResult: MethodChannel.Result? = null
+    private var pendingStopResult: MethodChannel.Result? = null
+    private val audioRequestCode = 1002
 
     private val main = Handler(Looper.getMainLooper())
     private val videoExecutor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -121,6 +140,21 @@ class PosePlugin :
                 }
             }
         }
+
+        videoChannel = MethodChannel(binding.binaryMessenger, "com.jumprope/video").also {
+            it.setMethodCallHandler { call, result -> onVideoCall(call, result) }
+        }
+        videoEventChannel = EventChannel(binding.binaryMessenger, "com.jumprope/video_events").also {
+            it.setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    videoSink = events
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    videoSink = null
+                }
+            })
+        }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -133,6 +167,11 @@ class PosePlugin :
         soundChannel = null
         soundPool?.release()
         soundPool = null
+        videoChannel?.setMethodCallHandler(null)
+        videoChannel = null
+        videoEventChannel?.setStreamHandler(null)
+        videoEventChannel = null
+        videoSink = null
         channel = null
         eventChannel = null
         camera?.dispose()
@@ -147,19 +186,216 @@ class PosePlugin :
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
+        activityBinding = binding
+        binding.addRequestPermissionsResultListener(this)
     }
 
     override fun onDetachedFromActivityForConfigChanges() {
+        activityBinding?.removeRequestPermissionsResultListener(this)
+        activityBinding = null
         activity = null
     }
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
         activity = binding.activity
+        activityBinding = binding
+        binding.addRequestPermissionsResultListener(this)
     }
 
     override fun onDetachedFromActivity() {
+        activityBinding?.removeRequestPermissionsResultListener(this)
+        activityBinding = null
         PreviewHolder.detach()
         activity = null
+    }
+
+    // ---------------- 录像权限 / 通道 ----------------
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ): Boolean {
+        if (requestCode != audioRequestCode) return false
+        val pending = pendingStartResult
+        pendingStartResult = null
+        if (pending == null) return true
+        if (grantResults.isNotEmpty() &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED
+        ) {
+            startRecordingNow(pending)
+        } else {
+            pending.error(
+                "audio_permission_denied",
+                "需要麦克风权限才能录制声音",
+                null,
+            )
+        }
+        return true
+    }
+
+    private fun onVideoCall(call: MethodCall, result: MethodChannel.Result) {
+        when (call.method) {
+            "startRecording" -> {
+                if (pendingStartResult != null) {
+                    result.error("busy", "上一次录像还在启动", null)
+                    return
+                }
+                val act = activity
+                if (act == null || camera == null) {
+                    result.error("camera_not_ready", "相机还没准备好", null)
+                    return
+                }
+                if (ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.RECORD_AUDIO,
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    pendingStartResult = result
+                    ActivityCompat.requestPermissions(
+                        act,
+                        arrayOf(Manifest.permission.RECORD_AUDIO),
+                        audioRequestCode,
+                    )
+                    return
+                }
+                startRecordingNow(result)
+            }
+
+            "stopRecording" -> {
+                if (pendingStopResult != null) {
+                    result.error("busy", "正在保存上一段录像", null)
+                    return
+                }
+                val cam = camera
+                if (cam == null || !cam.isRecording) {
+                    result.success(null)
+                    return
+                }
+                pendingStopResult = result
+                cam.stopRecording()
+                // 兜底：某些机型 Finalize 不回调，别让 Dart 永远等
+                main.postDelayed({
+                    val pending = pendingStopResult
+                    if (pending != null) {
+                        pendingStopResult = null
+                        pending.error("finalize_timeout", "录像保存超时", null)
+                    }
+                }, 15000)
+            }
+
+            "pauseRecording" -> {
+                camera?.pauseRecording()
+                result.success(null)
+            }
+
+            "resumeRecording" -> {
+                camera?.resumeRecording()
+                result.success(null)
+            }
+
+            "isRecording" -> result.success(camera?.isRecording == true)
+            "getVideoSupport" -> result.success(camera?.videoBound == true)
+            else -> result.notImplemented()
+        }
+    }
+
+    private fun startRecordingNow(result: MethodChannel.Result) {
+        val cam = camera
+        if (cam == null) {
+            result.error("camera_not_ready", "相机还没准备好", null)
+            return
+        }
+        val base = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
+            ?: context.filesDir
+        val dir = File(base, "jumprope")
+        if (!dir.exists() && !dir.mkdirs()) {
+            result.error("storage", "无法创建录像目录", null)
+            return
+        }
+        val file = File(dir, "vid-${System.currentTimeMillis()}.mp4")
+        val startedAt = SystemClock.elapsedRealtime()
+        val ok = cam.startRecording(file, true) { event ->
+            handleVideoEvent(event, file)
+        }
+        if (!ok) {
+            result.error("start_failed", "相机不支持同时录像，或启动失败", null)
+            return
+        }
+        result.success(
+            mapOf(
+                "path" to file.absolutePath,
+                "startedAtMs" to startedAt,
+            ),
+        )
+    }
+
+    private fun handleVideoEvent(event: VideoRecordEvent, file: File) {
+        when (event) {
+            is VideoRecordEvent.Start -> {
+                main.post {
+                    videoSink?.success(
+                        mapOf("event" to "started", "path" to file.absolutePath),
+                    )
+                }
+            }
+
+            is VideoRecordEvent.Finalize -> {
+                val map = HashMap<String, Any?>()
+                map["event"] = "finalized"
+                map["path"] = file.absolutePath
+                map["error"] = if (event.hasError()) event.error else 0
+                map.putAll(readVideoInfo(file))
+                main.post {
+                    val pending = pendingStopResult
+                    pendingStopResult = null
+                    if (pending != null) {
+                        if (event.hasError()) {
+                            pending.error(
+                                "finalize_failed",
+                                "录像保存失败 (${event.error})",
+                                null,
+                            )
+                        } else {
+                            pending.success(map)
+                        }
+                    } else {
+                        videoSink?.success(map)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun readVideoInfo(file: File): Map<String, Any> {
+        val out = HashMap<String, Any>()
+        if (!file.exists()) return out
+        val r = MediaMetadataRetriever()
+        try {
+            r.setDataSource(file.absolutePath)
+            out["durationMs"] =
+                r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    ?.toLongOrNull() ?: 0L
+            out["width"] =
+                r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+                    ?.toIntOrNull() ?: 0
+            out["height"] =
+                r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+                    ?.toIntOrNull() ?: 0
+            out["rotation"] =
+                r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
+                    ?.toIntOrNull() ?: 0
+            out["hasAudio"] =
+                r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) == "yes"
+            out["sizeBytes"] = file.length()
+        } catch (_: Exception) {
+        } finally {
+            try {
+                r.release()
+            } catch (_: Exception) {
+            }
+        }
+        return out
     }
 
     // ---------------- EventChannel ----------------

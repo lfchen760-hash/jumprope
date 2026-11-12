@@ -1,5 +1,6 @@
 package com.jumprope
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
@@ -14,8 +15,17 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.FallbackStrategy
+import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.Recording
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -42,6 +52,18 @@ class CameraStreamHandler(
     private var cameraProvider: ProcessCameraProvider? = null
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val busy = AtomicBoolean(false)
+
+    // 录制：和预览/分析同时绑定；部分低端机不支持三路，自动退化成不录像
+    private var recorder: Recorder? = null
+    private var recording: Recording? = null
+
+    @Volatile
+    var videoBound: Boolean = false
+        private set
+
+    @Volatile
+    var isRecording: Boolean = false
+        private set
 
     /** 预览请求次数，用于排查"纹理拿到但没画面" */
     @Volatile
@@ -122,16 +144,39 @@ class CameraStreamHandler(
             CameraSelector.DEFAULT_BACK_CAMERA
         }
 
+        val newRecorder = Recorder.Builder()
+            .setQualitySelector(
+                QualitySelector.fromOrderedList(
+                    listOf(Quality.HD, Quality.SD),
+                    FallbackStrategy.lowerQualityOrHigherThan(Quality.SD),
+                ),
+            )
+            .build()
+        val videoCapture = VideoCapture.withOutput(newRecorder)
+
         return try {
             provider.unbindAll()
-            if (true) {
+            try {
+                provider.bindToLifecycle(
+                    lifecycleOwner,
+                    selector,
+                    preview,
+                    analysis,
+                    videoCapture,
+                )
+                recorder = newRecorder
+                videoBound = true
+            } catch (e: Exception) {
+                // 三路 UseCase 在部分机型会失败：退回预览 + 分析，录像不可用
+                provider.unbindAll()
                 provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
-            } else {
-                provider.bindToLifecycle(lifecycleOwner, selector, analysis)
+                recorder = null
+                videoBound = false
             }
             running = true
             true
         } catch (e: Exception) {
+            running = false
             false
         }
     }
@@ -144,7 +189,66 @@ class CameraStreamHandler(
     fun stop() {
         running = false
         try {
+            recording?.stop()
+        } catch (_: Exception) {
+        }
+        recording = null
+        isRecording = false
+        try {
             cameraProvider?.unbindAll()
+        } catch (_: Exception) {
+        }
+    }
+
+    /**
+     * 开始录制。调用方负责检查麦克风权限；withAudio=true 时录麦克风环境声。
+     * 回调在 CameraX 的 main executor 上触发。
+     */
+    @SuppressLint("MissingPermission")
+    fun startRecording(
+        file: File,
+        withAudio: Boolean,
+        onEvent: (VideoRecordEvent) -> Unit,
+    ): Boolean {
+        val rec = recorder ?: return false
+        if (recording != null) return false
+        return try {
+            val options = FileOutputOptions.Builder(file).build()
+            var pending = rec.prepareRecording(context, options)
+            if (withAudio) pending = pending.withAudioEnabled()
+            isRecording = true
+            recording = pending.start(ContextCompat.getMainExecutor(context)) { event ->
+                if (event is VideoRecordEvent.Finalize) {
+                    recording = null
+                    isRecording = false
+                }
+                onEvent(event)
+            }
+            true
+        } catch (e: Exception) {
+            recording = null
+            isRecording = false
+            false
+        }
+    }
+
+    fun pauseRecording() {
+        try {
+            recording?.pause()
+        } catch (_: Exception) {
+        }
+    }
+
+    fun resumeRecording() {
+        try {
+            recording?.resume()
+        } catch (_: Exception) {
+        }
+    }
+
+    fun stopRecording() {
+        try {
+            recording?.stop()
         } catch (_: Exception) {
         }
     }

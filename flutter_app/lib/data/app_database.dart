@@ -9,20 +9,42 @@ import 'child_profile.dart';
 import 'date_utils.dart';
 import 'goal_entry.dart';
 import 'session_record.dart';
+import 'session_video.dart';
 
-/// 本地 SQLite。schema v2；以后只加不删，迁移前备份。
+/// 本地 SQLite。schema v3；以后只加不删，迁移前备份。
 class AppDatabase {
   AppDatabase._();
 
   static final AppDatabase instance = AppDatabase._();
 
-  static const int schemaVersion = 2;
+  static const int schemaVersion = 3;
   static const String settingsKey = 'app_settings_v1';
 
   static const String tableProfile = 'profile';
   static const String tableSessions = 'sessions';
   static const String tableGoals = 'goal_history';
   static const String tableSettings = 'settings';
+  static const String tableVideos = 'session_videos';
+
+  static const String _createVideosSql =
+      '''
+    CREATE TABLE IF NOT EXISTS $tableVideos (
+      session_id TEXT PRIMARY KEY,
+      raw_path TEXT NOT NULL,
+      start_offset_ms INTEGER NOT NULL DEFAULT 0,
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      width INTEGER NOT NULL DEFAULT 0,
+      height INTEGER NOT NULL DEFAULT 0,
+      rotation INTEGER NOT NULL DEFAULT 0,
+      has_audio INTEGER NOT NULL DEFAULT 0,
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    )
+  ''';
+
+  static const String _createVideosIndexSql =
+      'CREATE INDEX IF NOT EXISTS idx_videos_created '
+      'ON $tableVideos(created_at)';
 
   static const String _dbName = 'jumprope.db';
 
@@ -103,6 +125,8 @@ class AppDatabase {
             value TEXT NOT NULL
           )
         ''');
+        b.execute(_createVideosSql);
+        b.execute(_createVideosIndexSql);
         await b.commit(noResult: true);
 
         await db.insert(
@@ -135,6 +159,11 @@ class AppDatabase {
                 )
               )
           ''');
+        }
+        if (oldVersion < 3) {
+          // v3：原始录像元数据；视频文件本身不进库。
+          await db.execute(_createVideosSql);
+          await db.execute(_createVideosIndexSql);
         }
       },
       onDowngrade: (db, oldVersion, newVersion) async {
@@ -205,6 +234,51 @@ class AppDatabase {
     await db.delete(tableSessions, where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<void> saveVideo(SessionVideo video) async {
+    final db = await database;
+    await db.insert(
+      tableVideos,
+      video.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<SessionVideo?> videoForSession(String sessionId) async {
+    final db = await database;
+    final rows = await db.query(
+      tableVideos,
+      where: 'session_id = ?',
+      whereArgs: [sessionId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : SessionVideo.fromMap(rows.first);
+  }
+
+  Future<List<SessionVideo>> allVideos() async {
+    final db = await database;
+    final rows = await db.query(tableVideos, orderBy: 'created_at DESC');
+    return rows.map(SessionVideo.fromMap).toList();
+  }
+
+  Future<void> deleteVideo(String sessionId) async {
+    final db = await database;
+    await db.delete(
+      tableVideos,
+      where: 'session_id = ?',
+      whereArgs: [sessionId],
+    );
+  }
+
+  Future<List<SessionVideo>> videosBefore(int createdAtMs) async {
+    final db = await database;
+    final rows = await db.query(
+      tableVideos,
+      where: 'created_at < ?',
+      whereArgs: [createdAtMs],
+    );
+    return rows.map(SessionVideo.fromMap).toList();
+  }
+
   Future<List<GoalEntry>> goalHistory() async {
     final db = await database;
     final rows = await db.query(tableGoals, orderBy: 'effective_from ASC');
@@ -273,6 +347,7 @@ class AppDatabase {
     await db.transaction((txn) async {
       for (final t in [
         tableSessions,
+        tableVideos,
         tableProfile,
         tableGoals,
         tableSettings,

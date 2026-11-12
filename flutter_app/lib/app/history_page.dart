@@ -7,8 +7,9 @@ import '../data/goal_entry.dart';
 import '../data/period.dart';
 import '../data/period_stats.dart';
 import '../data/session_record.dart';
+import '../data/session_video.dart';
 import 'history/all_records_view.dart';
-import 'history/delete_session.dart';
+import 'history/delete_session_action.dart';
 import 'history/error_card.dart';
 import 'history/history_aggregates.dart';
 import 'history/history_header.dart';
@@ -17,6 +18,7 @@ import 'history/period_calendar.dart';
 import 'history/period_summary_card.dart';
 import 'history/period_tabs.dart';
 import 'history/session_list.dart';
+import 'video_player_page.dart';
 import 'theme.dart';
 
 /// 记录页：日 / 周 / 月 / 年 + 月历热力 + 明细。
@@ -39,6 +41,7 @@ class HistoryPage extends StatefulWidget {
 class _HistoryPageState extends State<HistoryPage> {
   List<SessionRecord> _sessions = const [];
   List<GoalEntry> _goals = const [];
+  Map<String, SessionVideo> _videos = const {};
   ChildProfile? _profile;
   bool _loading = true;
   String? _error;
@@ -63,11 +66,13 @@ class _HistoryPageState extends State<HistoryPage> {
       final sessions = await widget.repo.allSessions();
       final goals = await widget.repo.goalHistory();
       final profile = await widget.repo.loadProfile();
+      final videos = await widget.repo.allVideos();
       if (!mounted) return;
       setState(() {
         _sessions = sessions;
         _goals = goals;
         _profile = profile;
+        _videos = {for (final v in videos) v.sessionId: v};
         _loading = false;
         _error = null;
       });
@@ -183,6 +188,8 @@ class _HistoryPageState extends State<HistoryPage> {
                 sessions: _sessions,
                 today: today,
                 onDelete: _confirmDelete,
+                videos: _videos,
+                onOpenVideo: (v) => openVideoPage(context, v),
               )
             else ...[
               PeriodTabs(selected: _kind, onChanged: _selectKind),
@@ -227,6 +234,8 @@ class _HistoryPageState extends State<HistoryPage> {
                 today: today,
                 truncated: inRange.length > visible.length,
                 onDelete: _confirmDelete,
+                videos: _videos,
+                onOpenVideo: (v) => openVideoPage(context, v),
               ),
             ],
           ],
@@ -235,25 +244,12 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
-  Future<void> _confirmDelete(SessionRecord session) async {
-    try {
-      final deleted = await confirmDeleteSession(
-        context,
-        repo: widget.repo,
-        session: session,
-      );
-      if (!deleted || !mounted) return;
-      // AppShell 会自增 dataVersion，didUpdateWidget 里重新读库。
-      widget.onDataChanged();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('记录已删除')));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('删除失败：$e')));
-    }
-  }
+  Future<void> _confirmDelete(SessionRecord session) => deleteSessionAndRefresh(
+    context,
+    repo: widget.repo,
+    session: session,
+    onDeleted: widget.onDataChanged,
+  );
 
   void _shift(int delta) {
     final next = shiftRange(rangeFor(_kind, _anchor), delta);

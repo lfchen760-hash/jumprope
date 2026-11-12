@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/session_record.dart';
+import '../../data/session_video.dart';
 import 'session_list.dart';
 
 /// 默认视图：全部记录，按时间倒序，最多显示 200 条。
@@ -10,11 +11,15 @@ class AllRecordsView extends StatelessWidget {
     required this.sessions,
     required this.today,
     required this.onDelete,
+    required this.videos,
+    required this.onOpenVideo,
   });
 
   final List<SessionRecord> sessions;
   final String today;
   final ValueChanged<SessionRecord> onDelete;
+  final Map<String, SessionVideo> videos;
+  final ValueChanged<SessionVideo> onOpenVideo;
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +32,8 @@ class AllRecordsView extends StatelessWidget {
       today: today,
       truncated: sorted.length > visible.length,
       onDelete: onDelete,
+      videos: videos,
+      onOpenVideo: onOpenVideo,
     );
   }
 }

@@ -16,8 +16,8 @@ Web 版（H5）  = 算法实验台，长期保留，调参主战场
 Flutter 版    = 最终产品，仅 Android
 ```
 
-当前阶段：**数据层 v2 + 正式 UI v0 + 成长日历 v1**（首页/结果/记录/我的，
-记录页日/周/月/年切换）。算法验证继续；出框暂停、音效开关还没做。
+当前阶段：**数据层 v3 + 正式 UI v0 + 成长日历 v1 + 录像采集 v1**（首页/结果/记录/我的，
+记录页日/周/月/年切换，原始录像回放）。算法验证继续；特效导出、出框暂停、音效开关还没做。
 签名已固定为公开 dev key，CI 构建可覆盖升级；正式发布前要换私有 release key。
 
 文档：
@@ -68,13 +68,17 @@ Flutter 版    = 最终产品，仅 Android
 │   │   ├── result_page.dart     结果页（表盘/统计/节奏）
 │   │   ├── history_page.dart    记录页（默认月历；可切列表；日/周/月/年）
 │   │   ├── history/            ★ 记录/日历组件（列表/删除/月历/周条/年柱）
+│   │   ├── video_player_page.dart 原始录像回放
 │   │   ├── profile_page.dart    我的（展示 + 编辑入口）
 │   │   ├── profile_form_page.dart 首启引导 / 档案表单
 │   │   └── theme.dart / ui.dart 设计稿色板与通用组件
-│   ├── lib/data/                ★ 本地数据层（SQLite v2）
+│   ├── lib/data/                ★ 本地数据层（SQLite v3）
 │   │   ├── app_database.dart    建表/迁移/DAO
 │   │   ├── data_repository.dart 门面 + 导入导出
 │   │   ├── session_record.dart  会话（逐跳时间戳）
+│   │   ├── session_video.dart   原始录像元数据（路径/时间偏移/尺寸）
+│   │   ├── video_recorder.dart  原生录像通道
+│   │   ├── video_store.dart     录像文件生命周期（3 天）
 │   │   ├── session_saver.dart   结束后自动落库
 │   │   ├── child_profile.dart   孩子档案
 │   │   ├── jump_benchmark.dart  2014 国标阈值表
@@ -253,20 +257,21 @@ MOVE_X_MAX=0.25  TILT_MAX=35   KNEE_MIN=100
 
 ---
 
-## 5.5 数据层与签名（v2）
+## 5.5 数据层与签名（v3）
 
 ### 数据层（`flutter_app/lib/data/`）
 
-- SQLite 库 `jumprope.db`，`schemaVersion = 2`；表：`profile` / `sessions` /
-  `goal_history` / `settings`。
+- SQLite 库 `jumprope.db`，`schemaVersion = 3`；表：`profile` / `sessions` /
+  `goal_history` / `settings` / `session_videos`。
 - **只存事实**：档案、每次会话（含 `jumps_json` 逐跳 offset）、目标历史、设置。
 - **不存派生**：日/周/月/年总数、连续天数、个人最好、参考线状态、日历颜色，
   全部从会话算；避免两套数字打架。
 - 会话存 `grade_at_session` / `gender_at_session` / `standard_version` 快照；
   2014 国标阈值表在 `jump_benchmark.dart`，不按用户复制。
 - 迁移：`PRAGMA user_version`；只加不删；迁移前备份 `.bak-vN`；不要
-  `DROP TABLE` / 删库重建。当前 v2：v2 把「提前结束/出框」从无效原因里去掉了，
+  `DROP TABLE` / 删库重建。当前 v3：v2 把「提前结束/出框」从无效原因里去掉了，
   旧库中仅因这两项被标无效的会话会自动改回计入（迁移前备份 `.bak-v1`）。
+  v3 新增 `session_videos`（路径 + 时间轴元数据，不含视频文件）。
 - 导入/导出：`ExportBundle`（JSON，含 schemaVersion）；导入前先导出一份
   backup；整体替换用 `replace: true`。
 - 数据层测试：`flutter_app/test/data_layer_test.dart`（纯逻辑，不碰 sqflite）。
@@ -275,6 +280,10 @@ MOVE_X_MAX=0.25  TILT_MAX=35   KNEE_MIN=100
   出框累计超限不再判无效，不要往回加。
 - 删除：`DataRepository.deleteSession(id)`；删完所有派生数字（今日/周/月/年、
   连续、纪录、日历颜色）自动重算，不需要额外清理。
+- 录像：文件**不入库**，`session_videos` 只存路径 + `start_offset_ms` /
+  `duration_ms` / 尺寸 / 音频标记；原始视频是干净画面，特效在导出时再烧。
+  只保留 3 天（`VideoStore.cleanup()` 启动时执行）；删会话时删文件 + 行。
+  `start_offset_ms` = 开始录制时会话的活动时间，后期把 jumps 映射到视频。
 - 会话结束（`finished`）时 `SessionSaver` 自动写一条 `SessionRecord`：
   `SessionResult` → `SessionRecord.fromResult` → `DataRepository.saveSession`。
   只写一次；0 跳会话也存，但 `valid=false`（`no_jumps`），不进统计。

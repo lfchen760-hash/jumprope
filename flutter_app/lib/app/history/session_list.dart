@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/date_utils.dart';
 import '../../data/period.dart';
 import '../../data/session_record.dart';
+import '../../data/session_video.dart';
 import '../theme.dart';
 import '../ui.dart';
 
@@ -15,6 +16,8 @@ class SessionList extends StatelessWidget {
     this.title = '明细',
     this.truncated = false,
     this.onDelete,
+    this.videos = const {},
+    this.onOpenVideo,
   });
 
   final List<SessionRecord> sessions;
@@ -22,6 +25,8 @@ class SessionList extends StatelessWidget {
   final String title;
   final bool truncated;
   final ValueChanged<SessionRecord>? onDelete;
+  final Map<String, SessionVideo> videos;
+  final ValueChanged<SessionVideo>? onOpenVideo;
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +68,14 @@ class SessionList extends StatelessWidget {
         ),
       );
       for (final session in items) {
-        children.add(_SessionTile(session: session, onDelete: onDelete));
+        children.add(
+          _SessionTile(
+            session: session,
+            onDelete: onDelete,
+            video: videos[session.id],
+            onOpenVideo: onOpenVideo,
+          ),
+        );
       }
     }
 
@@ -116,10 +128,17 @@ class SessionList extends StatelessWidget {
 }
 
 class _SessionTile extends StatelessWidget {
-  const _SessionTile({required this.session, this.onDelete});
+  const _SessionTile({
+    required this.session,
+    this.onDelete,
+    this.video,
+    this.onOpenVideo,
+  });
 
   final SessionRecord session;
   final ValueChanged<SessionRecord>? onDelete;
+  final SessionVideo? video;
+  final ValueChanged<SessionVideo>? onOpenVideo;
 
   @override
   Widget build(BuildContext context) {
@@ -174,6 +193,19 @@ class _SessionTile extends StatelessWidget {
                               fontSize: 10,
                               color: AppColors.muted,
                             ),
+                          ),
+                        ),
+                      if (video != null && onOpenVideo != null)
+                        IconButton(
+                          onPressed: () => onOpenVideo!(video!),
+                          icon: const Icon(Icons.play_circle_outline, size: 18),
+                          color: AppColors.inkSoft,
+                          tooltip: '查看录像',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
                           ),
                         ),
                       if (onDelete != null) ...[
