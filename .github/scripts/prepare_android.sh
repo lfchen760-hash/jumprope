@@ -232,6 +232,40 @@ else:
     print('   已存在 proguardFiles')
 PYPATCH
 
+# ── 4.7 关闭 release lint ────────────────────────────
+# 新版 AGP 的 lint 在 camera_android_camerax 上崩：
+#   lintVitalAnalyzeRelease > CommentDetector > NoSuchMethodError
+# 这是 lint 自身的 bug，与业务代码无关；release 只做打包，不跑 lint。
+echo "==> 4.7 关闭 release lint"
+python3 - "$APP_DIR" <<'PYLINT'
+import glob, os, re, sys
+app = sys.argv[1]
+files = glob.glob(os.path.join(app, 'android/app/build.gradle*'))
+if not files:
+    print('   ❌ 找不到 build.gradle')
+    raise SystemExit(1)
+path = files[0]
+s = open(path, encoding='utf-8').read()
+if 'checkReleaseBuilds' in s:
+    print('   已存在 lint 配置')
+else:
+    kts = path.endswith('.kts')
+    add = ('\n    lint {\n'
+           '        checkReleaseBuilds = false\n'
+           '        abortOnError = false\n'
+           '    }\n') if kts else ('\n    lint {\n'
+                                   '        checkReleaseBuilds false\n'
+                                   '        abortOnError false\n'
+                                   '    }\n')
+    m = re.search(r'\nandroid\s*\{', s)
+    if not m:
+        print('   ❌ 找不到 android 块')
+        raise SystemExit(1)
+    s = s[:m.end()] + add + s[m.end():]
+    open(path, 'w', encoding='utf-8').write(s)
+    print('   已关闭 checkReleaseBuilds')
+PYLINT
+
 # ── 5. 打印结果，方便在日志里核对 ─────────────────────
 echo "==> 5/5 校验"
 echo "--- dependencies 片段 ---"
