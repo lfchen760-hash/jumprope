@@ -10,7 +10,6 @@ class DayCard extends StatelessWidget {
   const DayCard({
     super.key,
     required this.date,
-    required this.today,
     required this.total,
     required this.goal,
     required this.sessionCount,
@@ -22,7 +21,6 @@ class DayCard extends StatelessWidget {
   });
 
   final String date;
-  final String today;
   final int total;
   final int goal;
   final int sessionCount;

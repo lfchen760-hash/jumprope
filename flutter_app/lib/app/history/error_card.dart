@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme.dart';
 import '../ui.dart';
 
 /// 读取失败时的重试卡片。

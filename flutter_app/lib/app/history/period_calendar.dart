@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../data/date_utils.dart';
 import '../../data/period.dart';
 import 'day_card.dart';
 import 'month_calendar.dart';
@@ -52,7 +53,6 @@ class PeriodCalendar extends StatelessWidget {
     return switch (kind) {
       PeriodKind.day => DayCard(
         date: range.start,
-        today: today,
         total: totals[range.start] ?? 0,
         goal: dayGoal,
         sessionCount: daySessionCount,

@@ -152,6 +152,9 @@ class _DayCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final light = level <= 1;
     final day = int.parse(date.substring(8));
+    final background = level == 0 && !rest
+        ? AppColors.track.withOpacity(0.35)
+        : heatColor(level);
     final textColor = isFuture
         ? AppColors.muted.withOpacity(0.35)
         : light
@@ -165,7 +168,7 @@ class _DayCell extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: level == 4 ? null : heatColor(level),
+            color: level == 4 ? null : background,
             gradient: level == 4 ? AppColors.gradient : null,
             borderRadius: BorderRadius.circular(12),
             border: isToday
