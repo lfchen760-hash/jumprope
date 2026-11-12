@@ -42,7 +42,7 @@ class _HistoryPageState extends State<HistoryPage> {
   ChildProfile? _profile;
   bool _loading = true;
   String? _error;
-  bool _calendarMode = false;
+  bool _calendarMode = true;
   PeriodKind _kind = PeriodKind.month;
   String _anchor = todayLocalDate();
 

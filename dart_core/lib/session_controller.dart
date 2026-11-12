@@ -47,6 +47,9 @@ class SessionController {
 
   /// running 期间没有姿态的累计时长（用于有效性判定）
   double _outOfFrameMs = 0;
+
+  /// 累计出框时长（毫秒），暂停段不计；目前只用于诊断，不再判无效。
+  double get outOfFrameMs => _outOfFrameMs;
   double? _prevFrameT;
 
   int _remainingMs = 0;
@@ -284,19 +287,14 @@ class SessionController {
 
     final reasons = <String>[];
     final completed = plannedMs == 0 || active >= (plannedMs * 0.9).round();
-    if (!completed) reasons.add(SessionResult.reasonUnfinished);
+    // 提前结束、出框不再自动判无效：默认计入，家长可以手动删除。
+    // 只有「一次都没跳」和「非相机」仍然不进统计。
 
     // 一次都没跳：存下来但标无效，别把「站着不动」算成活跃天
     if (_count <= 0) reasons.add(SessionResult.reasonNoJumps);
 
     if (source.kind != SourceKind.camera) {
       reasons.add(SessionResult.reasonNotCamera);
-    }
-
-    // 出框累计 ≤ 5% 且 ≤ 3s 才有效
-    if (plannedMs > 0 &&
-        (_outOfFrameMs > plannedMs * 0.05 || _outOfFrameMs > 3000)) {
-      reasons.add(SessionResult.reasonOutOfFrame);
     }
 
     final jumps = [

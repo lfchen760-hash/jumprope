@@ -10,13 +10,13 @@ import 'date_utils.dart';
 import 'goal_entry.dart';
 import 'session_record.dart';
 
-/// 本地 SQLite。schema v1；以后只加不删，迁移前备份。
+/// 本地 SQLite。schema v2；以后只加不删，迁移前备份。
 class AppDatabase {
   AppDatabase._();
 
   static final AppDatabase instance = AppDatabase._();
 
-  static const int schemaVersion = 1;
+  static const int schemaVersion = 2;
   static const String settingsKey = 'app_settings_v1';
 
   static const String tableProfile = 'profile';
@@ -117,7 +117,25 @@ class AppDatabase {
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // v1 是初始版本。以后按版本号追加 ALTER/CREATE，只加不删。
-        // if (oldVersion < 2) { ... }
+        if (oldVersion < 2) {
+          // v2：提前结束/出框不再自动判无效。
+          // 把旧库里仅因此被标无效的会话改回计入，并清掉这些原因；
+          // 0 跳 / 非相机仍然保持无效。备份由 onConfigure 完成。
+          await db.rawUpdate('''
+            UPDATE $tableSessions
+            SET valid = 1, invalid_reasons_json = NULL
+            WHERE valid = 0
+              AND count > 0
+              AND source = 'camera'
+              AND (
+                invalid_reasons_json IS NULL
+                OR (
+                  invalid_reasons_json NOT LIKE '%no_jumps%'
+                  AND invalid_reasons_json NOT LIKE '%not_camera%'
+                )
+              )
+          ''');
+        }
       },
       onDowngrade: (db, oldVersion, newVersion) async {
         throw StateError('数据库版本 $oldVersion 高于当前 App 支持的 $newVersion，请升级 App');

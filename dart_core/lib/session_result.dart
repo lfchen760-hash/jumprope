@@ -5,8 +5,9 @@ import 'pose_source.dart';
 /// 只在 `finished` 时生成一次；`jumps` 是逐跳 offset（毫秒，**活动时间**，
 /// 不含暂停），数据层的 `SessionRecord.jumps` 直接用它。
 ///
-/// 有效性规则见 `design/data-logic.md` §5.2。当前能自动判定的只有：
-/// 非相机模式、完成度 < 90%、出框累计超限。多人检测还没接。
+/// 有效性规则见 `design/data-logic.md` §5.2：
+/// 只有「0 跳」和「非相机」自动判无效；提前结束、出框默认计入，
+/// 由用户手动删除不想要的记录。多人检测还没接。
 class SessionResult {
   static const String reasonUnfinished = 'unfinished';
   static const String reasonNotCamera = 'not_camera';

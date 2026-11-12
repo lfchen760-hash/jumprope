@@ -387,9 +387,10 @@ Future<void> testSessionResult() async {
     final r = sc.result;
     check('提前结束有结果', r != null);
     if (r != null) {
+      check('提前结束仍计入', r.valid, '${r.invalidReasons}');
       check(
-          '提前结束未完成',
-          !r.valid && r.invalidReasons.contains(SessionResult.reasonUnfinished),
+          '不再标未完成原因',
+          !r.invalidReasons.contains(SessionResult.reasonUnfinished),
           '${r.invalidReasons}');
       check('结果活动时长一致', r.activeMs == after, '结果 ${r.activeMs} / 状态 $after');
     }
@@ -463,10 +464,10 @@ Future<void> testSessionResult() async {
       stableMs: 0,
     );
     await sc.start();
-    for (var t = 0.0; t <= 1000; t += 33.0) {
-      src.emit(PoseFrame(t, skeleton(0.5)));
+    for (final f in jumpingFrames(seconds: 2)) {
+      src.emit(f);
     }
-    for (var t = 1033.0; t <= 5000; t += 33.0) {
+    for (var t = 2033.0; t <= 5000; t += 33.0) {
       src.emit(PoseFrame(t, const []));
     }
     src.emit(PoseFrame(5020, skeleton(0.5)));
@@ -475,9 +476,10 @@ Future<void> testSessionResult() async {
     final r = sc.result;
     check('出框会话有结果', r != null);
     if (r != null) {
+      check('出框累计超限仍计入', r.valid, '${r.invalidReasons}');
       check(
-          '出框累计超限无效',
-          !r.valid && r.invalidReasons.contains(SessionResult.reasonOutOfFrame),
+          '不再标出框原因',
+          !r.invalidReasons.contains(SessionResult.reasonOutOfFrame),
           '${r.invalidReasons}');
     }
     await sc.dispose();
