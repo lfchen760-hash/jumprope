@@ -85,7 +85,7 @@ class DayCard extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text(
                       total == 0
-                          ? '这天还没有记录'
+                          ? (sessionCount == 0 ? '这天还没有记录' : '没有计入统计的记录')
                           : done
                           ? '目标已完成'
                           : '还差 $left 个',

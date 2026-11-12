@@ -150,7 +150,7 @@ class _DayCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final light = level <= 1;
+    final light = level <= 2;
     final day = int.parse(date.substring(8));
     final background = level == 0 && !rest
         ? AppColors.track.withOpacity(0.35)

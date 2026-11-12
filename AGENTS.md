@@ -3,7 +3,7 @@
 给接手的 agent（或未来的自己）看的操作手册。
 **只写「不看就会踩坑」的东西**，不写代码细节。
 
-最后更新：2026-11-10
+最后更新：2026-11-12
 
 ---
 
@@ -16,8 +16,8 @@ Web 版（H5）  = 算法实验台，长期保留，调参主战场
 Flutter 版    = 最终产品，仅 Android
 ```
 
-当前阶段：**数据层 v1 + 正式 UI v0**（首页/结果/记录/我的，读库闭环）。
-算法验证继续；月历、出框暂停还没做。
+当前阶段：**数据层 v1 + 正式 UI v0 + 成长日历 v1**（首页/结果/记录/我的，
+记录页日/周/月/年切换）。算法验证继续；出框暂停、音效开关还没做。
 签名已固定为公开 dev key，CI 构建可覆盖升级；正式发布前要换私有 release key。
 
 文档：
@@ -66,7 +66,8 @@ Flutter 版    = 最终产品，仅 Android
 │   ├── lib/app/                 ★ 正式 UI（首页/结果/记录/我的）
 │   │   ├── home_page.dart       首页（目标环 + 开始）
 │   │   ├── result_page.dart     结果页（表盘/统计/节奏）
-│   │   ├── history_page.dart    记录列表
+│   │   ├── history_page.dart    记录页（日/周/月/年 + 汇总 + 明细）
+│   │   ├── history/            ★ 日历组件（月历/周条/年柱/汇总/最佳）
 │   │   ├── profile_page.dart    我的（展示 + 编辑入口）
 │   │   ├── profile_form_page.dart 首启引导 / 档案表单
 │   │   └── theme.dart / ui.dart 设计稿色板与通用组件
@@ -77,8 +78,10 @@ Flutter 版    = 最终产品，仅 Android
 │   │   ├── session_saver.dart   结束后自动落库
 │   │   ├── child_profile.dart   孩子档案
 │   │   ├── jump_benchmark.dart  2014 国标阈值表
-│   │   └── period_stats.dart    日/周/月/年统计
+│   │   ├── period_stats.dart    日/周/月/年统计
+│   │   └── period.dart          周期区间/月历格子/环比（纯逻辑）
 │   ├── test/data_layer_test.dart 数据层纯逻辑测试
+│   ├── test/period_test.dart    周期/月历/环比测试
 │   ├── lib/data/pose/           通道封装 + 两个 PoseSource
 │   └── android/.../com/jumprope/  PosePlugin / PoseProcessor / CameraStream
 │       android/.../res/raw/      tick_low.wav / tick_high.wav
@@ -343,6 +346,13 @@ unzip -l app-release.apk | grep wav   # 必须能看到 res/*.wav
 
 改完音效务必解包确认，不要只看「编译通过」。
 
+### Flutter 3.47 把 material.dart 标记为 deprecated
+
+CI 用 `channel: stable`，Flutter 3.47 起 `package:flutter/material.dart`
+会报 28 条 `deprecated_member_use` info，`flutter analyze` 直接非零退出，
+和代码本身无关。已用 `flutter_app/analysis_options.yaml` 忽略这条诊断；
+迁移到 `material_ui` 是独立任务，不要顺手改 import。
+
 ### dart pub get 用不了
 
 ```
@@ -460,7 +470,7 @@ git add -A && git commit -m "..." && git push
 
 | 工作流 | 触发 | 内容 |
 |---|---|---|
-| `.github/workflows/ci.yml` | push / PR | Dart 核心测试 + Flutter analyze + 数据层 `flutter test` |
+| `.github/workflows/ci.yml` | push / PR | Dart 核心测试 + Flutter analyze + 数据层 `flutter test`（ignore `deprecated_member_use`） |
 | `.github/workflows/android-build.yml` | push（flutter/.github 变更）/ 手动 | 生成脚手架 → 固定 DEV 签名 → 校验证书 → 构建 APK |
 
 **本地等价命令**（CI 会跑同样的东西）：
