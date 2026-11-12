@@ -12,12 +12,16 @@ class SessionList extends StatelessWidget {
     super.key,
     required this.sessions,
     required this.today,
+    this.title = '明细',
     this.truncated = false,
+    this.onDelete,
   });
 
   final List<SessionRecord> sessions;
   final String today;
+  final String title;
   final bool truncated;
+  final ValueChanged<SessionRecord>? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +63,7 @@ class SessionList extends StatelessWidget {
         ),
       );
       for (final session in items) {
-        children.add(_SessionTile(session: session));
+        children.add(_SessionTile(session: session, onDelete: onDelete));
       }
     }
 
@@ -68,7 +72,7 @@ class SessionList extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text('明细', style: inkTitle(16)),
+            Text(title, style: inkTitle(16)),
             const Spacer(),
             Text(
               '${sessions.length} 次',
@@ -93,7 +97,7 @@ class SessionList extends StatelessWidget {
             const Padding(
               padding: EdgeInsets.only(top: 10),
               child: Text(
-                '仅显示最近 100 条，切换更小的周期可看全',
+                '仅显示最近 ${sessions.length} 条',
                 style: TextStyle(fontSize: 10, color: AppColors.muted),
               ),
             ),
@@ -112,9 +116,10 @@ class SessionList extends StatelessWidget {
 }
 
 class _SessionTile extends StatelessWidget {
-  const _SessionTile({required this.session});
+  const _SessionTile({required this.session, this.onDelete});
 
   final SessionRecord session;
+  final ValueChanged<SessionRecord>? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -171,6 +176,21 @@ class _SessionTile extends StatelessWidget {
                             ),
                           ),
                         ),
+                      if (onDelete != null) ...[
+                        const SizedBox(width: 2),
+                        IconButton(
+                          onPressed: () => onDelete!(session),
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          color: AppColors.muted,
+                          tooltip: '删除记录',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 4),

@@ -62,12 +62,14 @@ class MediaPipeLandmarker {
 
     final lm = <Landmark>[];
     for (var i = 0; i < 33; i++) {
-      lm.add(Landmark(
-        flat[i * 4],
-        flat[i * 4 + 1],
-        flat[i * 4 + 2],
-        flat[i * 4 + 3],
-      ));
+      lm.add(
+        Landmark(
+          flat[i * 4],
+          flat[i * 4 + 1],
+          flat[i * 4 + 2],
+          flat[i * 4 + 3],
+        ),
+      );
     }
     return PoseFrame(t, lm);
   }
@@ -89,13 +91,18 @@ class MediaPipeLandmarker {
       await _method.invokeMethod<int>('getPreviewRequests') ?? -1;
 
   Future<bool> startCamera({bool front = true}) async =>
-      await _method.invokeMethod<bool>('startCamera', {'front': front}) ?? false;
+      await _method.invokeMethod<bool>('startCamera', {'front': front}) ??
+      false;
 
   Future<void> stopCamera() => _method.invokeMethod<void>('stopCamera');
 
   /// 调试：逐帧解码本地视频（很慢，只用于离线验证）
   Future<bool> processVideo(String path, {int fps = 30}) async =>
-      await _method.invokeMethod<bool>('processVideo', {'path': path, 'fps': fps}) ?? false;
+      await _method.invokeMethod<bool>('processVideo', {
+        'path': path,
+        'fps': fps,
+      }) ??
+      false;
 
   Future<void> stopVideo() => _method.invokeMethod<void>('stopVideo');
 

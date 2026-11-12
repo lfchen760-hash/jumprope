@@ -83,7 +83,11 @@ class _AppShellState extends State<AppShell> {
             onOpenHistory: () => setState(() => _tab = 1),
             onDataChanged: () => setState(() => _dataVersion++),
           ),
-          HistoryPage(key: ValueKey('history-$_dataVersion'), repo: _repo),
+          HistoryPage(
+            repo: _repo,
+            dataVersion: _dataVersion,
+            onDataChanged: () => setState(() => _dataVersion++),
+          ),
           ProfilePage(
             repo: _repo,
             onChanged: () => setState(() => _dataVersion++),

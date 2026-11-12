@@ -29,10 +29,10 @@ class CameraPoseSource implements PoseSource {
 
   @override
   Stream<PoseFrame> get frames => landmarker.frames.map((f) {
-        frameCount++;
-        if (f.hasPose) poseCount++;
-        return f;
-      });
+    frameCount++;
+    if (f.hasPose) poseCount++;
+    return f;
+  });
 
   @override
   SourceKind get kind => SourceKind.camera;

@@ -43,6 +43,9 @@ class DataRepository {
   Future<List<SessionRecord>> recentSessions(int limit) =>
       _db.recentSessions(limit);
 
+  /// 删除一条会话；日/周/月/年、纪录、连续天数都会随之重算。
+  Future<void> deleteSession(String id) => _db.deleteSession(id);
+
   Future<List<GoalEntry>> goalHistory() => _db.goalHistory();
 
   Future<int> goalForDate(String date) => _db.goalForDate(date);

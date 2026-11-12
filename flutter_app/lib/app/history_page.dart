@@ -4,11 +4,13 @@ import '../data/child_profile.dart';
 import '../data/data_repository.dart';
 import '../data/date_utils.dart';
 import '../data/goal_entry.dart';
-import '../data/jump_benchmark.dart';
 import '../data/period.dart';
 import '../data/period_stats.dart';
 import '../data/session_record.dart';
+import 'history/all_records_view.dart';
+import 'history/delete_session.dart';
 import 'history/error_card.dart';
+import 'history/history_aggregates.dart';
 import 'history/history_header.dart';
 import 'history/period_best_card.dart';
 import 'history/period_calendar.dart';
@@ -19,9 +21,16 @@ import 'theme.dart';
 
 /// 记录页：日 / 周 / 月 / 年 + 月历热力 + 明细。
 class HistoryPage extends StatefulWidget {
-  const HistoryPage({super.key, required this.repo});
+  const HistoryPage({
+    super.key,
+    required this.repo,
+    required this.dataVersion,
+    required this.onDataChanged,
+  });
 
   final DataRepository repo;
+  final int dataVersion;
+  final VoidCallback onDataChanged;
 
   @override
   State<HistoryPage> createState() => _HistoryPageState();
@@ -33,6 +42,7 @@ class _HistoryPageState extends State<HistoryPage> {
   ChildProfile? _profile;
   bool _loading = true;
   String? _error;
+  bool _calendarMode = false;
   PeriodKind _kind = PeriodKind.month;
   String _anchor = todayLocalDate();
 
@@ -40,6 +50,12 @@ class _HistoryPageState extends State<HistoryPage> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didUpdateWidget(HistoryPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.dataVersion != widget.dataVersion) _load();
   }
 
   Future<void> _load() async {
@@ -125,24 +141,14 @@ class _HistoryPageState extends State<HistoryPage> {
       );
     }
 
-    final best = _bestSession(inRange);
-    BenchmarkResult? benchmark;
-    if (best != null &&
-        best.mode == SessionMode.timed60 &&
-        _profile?.showBenchmark == true) {
-      benchmark = BenchmarkResult.forSession(
-        count: best.count,
-        grade: best.gradeAtSession,
-        gender: best.genderAtSession,
-      );
-    }
+    final best = bestSession(inRange);
+    final benchmark = benchmarkFor(best, _profile);
 
     final visible = inRange.take(100).toList();
-    final years = <int>{now.year, parseLocalDate(_anchor).year};
-    for (final session in _sessions) {
-      years.add(parseLocalDate(session.localDate).year);
-    }
-    final sortedYears = years.toList()..sort((a, b) => b.compareTo(a));
+    final sortedYears = availableYears(_sessions, [
+      now.year,
+      parseLocalDate(_anchor).year,
+    ]);
     final daySessions = inRange
         .where((s) => s.localDate == range.start)
         .toList();
@@ -162,12 +168,22 @@ class _HistoryPageState extends State<HistoryPage> {
               year: parseLocalDate(range.start).year,
               years: sortedYears,
               onYearSelected: _selectYear,
+              calendarMode: _calendarMode,
+              onToggleMode: () {
+                setState(() => _calendarMode = !_calendarMode);
+              },
             ),
             const SizedBox(height: 16),
             if (_error != null)
               ErrorCard(message: _error!, onRetry: _load)
             else if (_sessions.isEmpty)
               const EmptyHistory()
+            else if (!_calendarMode)
+              AllRecordsView(
+                sessions: _sessions,
+                today: today,
+                onDelete: _confirmDelete,
+              )
             else ...[
               PeriodTabs(selected: _kind, onChanged: _selectKind),
               const SizedBox(height: 12),
@@ -187,8 +203,8 @@ class _HistoryPageState extends State<HistoryPage> {
                 hasAny: hasAny,
                 daySessionCount: daySessions.length,
                 dayGoal: goalForDate(_goals, range.start),
-                dayBest: _bestCount(daySessions),
-                monthlyTotals: _monthlyTotals(rangeYear),
+                dayBest: bestCount(daySessions),
+                monthlyTotals: monthlyTotals(_sessions, rangeYear),
                 currentMonth: rangeYear == todayDate.year
                     ? todayDate.month
                     : null,
@@ -210,6 +226,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 sessions: visible,
                 today: today,
                 truncated: inRange.length > visible.length,
+                onDelete: _confirmDelete,
               ),
             ],
           ],
@@ -218,31 +235,24 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
-  SessionRecord? _bestSession(Iterable<SessionRecord> sessions) {
-    SessionRecord? best;
-    for (final session in sessions) {
-      if (!session.valid) continue;
-      if (best == null || session.count > best.count) best = session;
+  Future<void> _confirmDelete(SessionRecord session) async {
+    try {
+      final deleted = await confirmDeleteSession(
+        context,
+        repo: widget.repo,
+        session: session,
+      );
+      if (!deleted || !mounted) return;
+      // AppShell 会自增 dataVersion，didUpdateWidget 里重新读库。
+      widget.onDataChanged();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('记录已删除')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('删除失败：$e')));
     }
-    return best;
-  }
-
-  int _bestCount(Iterable<SessionRecord> sessions) {
-    var best = 0;
-    for (final session in sessions) {
-      if (session.valid && session.count > best) best = session.count;
-    }
-    return best;
-  }
-
-  List<int> _monthlyTotals(int year) {
-    final out = List<int>.filled(12, 0);
-    for (final session in _sessions) {
-      if (!session.valid) continue;
-      final date = parseLocalDate(session.localDate);
-      if (date.year == year) out[date.month - 1] += session.count;
-    }
-    return out;
   }
 
   void _shift(int delta) {
