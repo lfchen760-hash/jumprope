@@ -372,7 +372,7 @@ CI 用 `channel: stable`，Flutter 3.47 起 `package:flutter/material.dart`
 构建报 `lintVitalAnalyzeRelease`，栈里是
 `CommentDetector` → `NoSuchMethodError`（AGP/lint 自身 bug），跟 Dart 代码无关。
 `prepare_android.sh` 里已对 app 和子工程关掉 `lintVital`；
-#65/#66 已验证可以正常出 APK。再遇到类似“release 打包卡在插件 lint”，
+#65/#66/#70 已验证可以正常出 APK。再遇到类似“release 打包卡在插件 lint”，
 先查这里，不要改相机代码。
 
 ### dart pub get 用不了
