@@ -20,6 +20,13 @@ class AppColors {
   static const success = Color(0xFF1EAA69);
   static const warn = Color(0xFFE89634);
 
+  /// 日历热力：完成度 1–4 档。
+  static const heat1 = Color(0xFFFFE8CF);
+  static const heat2 = Color(0xFFFFC894);
+  static const heat3 = Color(0xFFFF9A4D);
+  static const heat4 = Color(0xFFFF6A3D);
+  static const emptyDay = Color(0xFFF7F3EA);
+
   static const gradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
@@ -32,6 +39,15 @@ class AppColors {
     colors: [actionOrange, actionPink],
   );
 }
+
+/// 热力色：0 = 无记录，1–4 = 完成度递增。
+Color heatColor(int level) => switch (level) {
+  <= 0 => AppColors.emptyDay,
+  1 => AppColors.heat1,
+  2 => AppColors.heat2,
+  3 => AppColors.heat3,
+  _ => AppColors.heat4,
+};
 
 TextStyle inkTitle(double size) => TextStyle(
   fontSize: size,
