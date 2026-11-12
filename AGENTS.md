@@ -153,6 +153,15 @@ curl -X POST -H "Authorization: Bearer <TOKEN>" \
 
 TOKEN 在服务启动日志里，可用环境变量 `UPLOAD_TOKEN` 固定。
 
+APK 构建完成后从 `apk` 分支同步到下载页：
+
+```bash
+cd jumprope && node sync-apk.mjs --once
+```
+
+脚本默认使用仓库的 Deploy Key；会更新 `jumprope.apk` 并留一份
+`jumprope-<build>.apk` 版本副本。
+
 ---
 
 ## 4. 环境约束（重要）
@@ -352,6 +361,14 @@ CI 用 `channel: stable`，Flutter 3.47 起 `package:flutter/material.dart`
 会报 28 条 `deprecated_member_use` info，`flutter analyze` 直接非零退出，
 和代码本身无关。已用 `flutter_app/analysis_options.yaml` 忽略这条诊断；
 迁移到 `material_ui` 是独立任务，不要顺手改 import。
+
+### Android release lint 在 camerax 上崩
+
+构建报 `lintVitalAnalyzeRelease`，栈里是
+`CommentDetector` → `NoSuchMethodError`（AGP/lint 自身 bug），跟 Dart 代码无关。
+`prepare_android.sh` 里已对 app 和子工程关掉 `lintVital`；
+#65/#66 已验证可以正常出 APK。再遇到类似“release 打包卡在插件 lint”，
+先查这里，不要改相机代码。
 
 ### dart pub get 用不了
 

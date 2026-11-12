@@ -277,7 +277,11 @@ http.createServer((req, res) => {
 
   /* ---- APK 直接下载 ---- */
   if (req.method === 'GET' && /\.(apk|zip|json|txt|md)$/i.test(u)) {
-    const name = decodeURIComponent(u.slice(1)).replace(/[^\w.\-]/g, '_');
+    // 下载页的链接是 /download/<file>，这里要剥掉前缀；
+    // 否则会落到 302 → HTTPS，手机上会被自签证书拦住。
+    let raw = u.slice(1);
+    if (raw.startsWith('download/')) raw = raw.slice('download/'.length);
+    const name = decodeURIComponent(raw).replace(/[^\w.\-]/g, '_');
     const file = path.join(DOWNLOAD_DIR, name);
     if (fs.existsSync(file)) {
       const st = fs.statSync(file);

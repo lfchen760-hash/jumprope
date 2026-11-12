@@ -20,6 +20,12 @@ const OUT_DIR = path.join(__dirname, 'public', 'download');
 const OUT_FILE = path.join(OUT_DIR, 'jumprope.apk');
 const STATE_FILE = path.join(__dirname, '.apk_sync_state.json');
 const INTERVAL_MS = 5 * 60 * 1000;
+// 从仓库拉取，必须走 Deploy Key；未显式设置时给默认值，
+// 否则 GIT_SSH_COMMAND='' 会让 git 直接报 "cannot run"。
+const SSH =
+  process.env.GIT_SSH_COMMAND ||
+  'ssh -i /root/dsh/test/.ssh/deploy_key ' +
+    '-o UserKnownHostsFile=/root/dsh/test/.ssh/known_hosts -o IdentitiesOnly=yes';
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
@@ -27,7 +33,7 @@ const git = (args, opts = {}) =>
   execFileSync('git', ['-C', REPO_DIR, ...args], {
     encoding: 'buffer',
     maxBuffer: 512 * 1024 * 1024,
-    env: { ...process.env, GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND || '' },
+    env: { ...process.env, GIT_SSH_COMMAND: SSH },
     ...opts,
   });
 
@@ -58,6 +64,13 @@ async function checkOnce() {
     return false;
   }
 
+  // apk 分支的 commit message 形如 "apk: build b054d1e [skip ci]"
+  const subject = git(['log', '-1', '--format=%s', `origin/${BRANCH}`])
+    .toString()
+    .trim();
+  const build = /build ([0-9a-f]{7,})/i.exec(subject)?.[1];
+  const tag = build ?? git(['rev-parse', `origin/${BRANCH}`]).toString().trim().slice(0, 7);
+
   log('发现新构建，导出中…');
   try {
     const buf = git(['cat-file', '-p', `origin/${BRANCH}:jumprope.apk`]);
@@ -65,7 +78,10 @@ async function checkOnce() {
     fs.writeFileSync(tmp, buf);
     fs.renameSync(tmp, OUT_FILE);
     writeState({ blob, size: buf.length, syncedAt: Date.now() });
+    const versioned = path.join(OUT_DIR, `jumprope-${tag}.apk`);
+    fs.copyFileSync(OUT_FILE, versioned);
     log(`完成 → ${OUT_FILE}  ${(buf.length / 1048576).toFixed(1)}MB`);
+    log(`版本副本 → ${path.basename(versioned)}`);
     return true;
   } catch (e) {
     log('导出失败:', e.message.split('\n')[0]);
