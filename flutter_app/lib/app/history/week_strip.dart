@@ -153,13 +153,18 @@ class _DayColumn extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 2),
-          Text(
-            total > 0 ? '$total' : '·',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AppColors.ink,
-            ),
+          SizedBox(
+            height: 14,
+            child: total > 0
+                ? Text(
+                    '$total',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
+                    ),
+                  )
+                : null,
           ),
         ],
       ),
