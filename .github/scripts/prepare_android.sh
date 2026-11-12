@@ -266,6 +266,30 @@ else:
     print('   已关闭 checkReleaseBuilds')
 PYLINT
 
+# 插件子工程（camera_android_camerax）自己的 lintVital 也要关，
+# 只改 app 的 lint 配置管不到它。
+python3 - "$APP_DIR" <<'PYROOT'
+import glob, os, sys
+app = sys.argv[1]
+files = glob.glob(os.path.join(app, 'android/build.gradle*'))
+if not files:
+    print('   ❌ 找不到根 build.gradle')
+    raise SystemExit(1)
+path = files[0]
+s = open(path, encoding='utf-8').read()
+if 'lintVital' not in s:
+    kts = path.endswith('.kts')
+    add = ('\nsubprojects {\n'
+           '    tasks.matching { it.name.contains("lintVital") }.configureEach { enabled = false }\n'
+           '}\n') if kts else ('\nsubprojects {\n'
+                               "    tasks.matching { it.name.contains('lintVital') }.configureEach { enabled = false }\n"
+                               '}\n')
+    open(path, 'w', encoding='utf-8').write(s.rstrip() + '\n' + add)
+    print('   已关闭子工程 lintVital')
+else:
+    print('   子工程 lintVital 已处理')
+PYROOT
+
 # ── 5. 打印结果，方便在日志里核对 ─────────────────────
 echo "==> 5/5 校验"
 echo "--- dependencies 片段 ---"
