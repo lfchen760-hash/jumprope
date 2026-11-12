@@ -94,11 +94,11 @@ class SessionList extends StatelessWidget {
         else ...[
           ...children,
           if (truncated)
-            const Padding(
-              padding: EdgeInsets.only(top: 10),
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
               child: Text(
                 '仅显示最近 ${sessions.length} 条',
-                style: TextStyle(fontSize: 10, color: AppColors.muted),
+                style: const TextStyle(fontSize: 10, color: AppColors.muted),
               ),
             ),
         ],
