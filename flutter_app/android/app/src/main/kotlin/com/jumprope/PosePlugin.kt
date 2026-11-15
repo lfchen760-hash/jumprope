@@ -78,6 +78,7 @@ class PosePlugin :
     private var videoSink: EventChannel.EventSink? = null
     private var activityBinding: ActivityPluginBinding? = null
     private var pendingStartResult: MethodChannel.Result? = null
+    private var pendingStartWithAudio = true
     private var pendingStopResult: MethodChannel.Result? = null
     private val audioRequestCode = 1002
 
@@ -223,7 +224,7 @@ class PosePlugin :
         if (grantResults.isNotEmpty() &&
             grantResults[0] == PackageManager.PERMISSION_GRANTED
         ) {
-            startRecordingNow(pending)
+            startRecordingNow(pending, pendingStartWithAudio)
         } else {
             pending.error(
                 "audio_permission_denied",
@@ -246,12 +247,14 @@ class PosePlugin :
                     result.error("camera_not_ready", "相机还没准备好", null)
                     return
                 }
-                if (ContextCompat.checkSelfPermission(
+                val withAudio = call.argument<Boolean>("withAudio") ?: true
+                if (withAudio && ContextCompat.checkSelfPermission(
                         context,
                         Manifest.permission.RECORD_AUDIO,
                     ) != PackageManager.PERMISSION_GRANTED
                 ) {
                     pendingStartResult = result
+                    pendingStartWithAudio = withAudio
                     ActivityCompat.requestPermissions(
                         act,
                         arrayOf(Manifest.permission.RECORD_AUDIO),
@@ -259,7 +262,7 @@ class PosePlugin :
                     )
                     return
                 }
-                startRecordingNow(result)
+                startRecordingNow(result, withAudio)
             }
 
             "stopRecording" -> {
@@ -300,7 +303,10 @@ class PosePlugin :
         }
     }
 
-    private fun startRecordingNow(result: MethodChannel.Result) {
+    private fun startRecordingNow(
+        result: MethodChannel.Result,
+        withAudio: Boolean = true,
+    ) {
         val cam = camera
         if (cam == null) {
             result.error("camera_not_ready", "相机还没准备好", null)
@@ -315,7 +321,7 @@ class PosePlugin :
         }
         val file = File(dir, "vid-${System.currentTimeMillis()}.mp4")
         val startedAt = SystemClock.elapsedRealtime()
-        val ok = cam.startRecording(file, true) { event ->
+        val ok = cam.startRecording(file, withAudio) { event ->
             handleVideoEvent(event, file)
         }
         if (!ok) {

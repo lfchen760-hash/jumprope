@@ -65,6 +65,10 @@ class CameraStreamHandler(
     var isRecording: Boolean = false
         private set
 
+    @Volatile
+    var lastVideoError: String? = null
+        private set
+
     /** 预览请求次数，用于排查"纹理拿到但没画面" */
     @Volatile
     var previewRequests: Int = 0
@@ -172,6 +176,7 @@ class CameraStreamHandler(
                 provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
                 recorder = null
                 videoBound = false
+                lastVideoError = "三路 UseCase 绑定失败: ${e.message}"
             }
             running = true
             true
@@ -184,7 +189,9 @@ class CameraStreamHandler(
     /** 相机状态摘要，给诊断面板用 */
     fun diagnostics(): String =
         "running=$running previewBound=$previewBound attached=$previewAttached " +
-            "attempts=$previewAttempts req=$previewRequests"
+            "attempts=$previewAttempts req=$previewRequests " +
+            "videoBound=$videoBound recording=$isRecording " +
+            "videoError=${lastVideoError ?: "-"}"
 
     fun stop() {
         running = false
@@ -228,6 +235,7 @@ class CameraStreamHandler(
         } catch (e: Exception) {
             recording = null
             isRecording = false
+            lastVideoError = "启动录像异常: ${e.message}"
             false
         }
     }

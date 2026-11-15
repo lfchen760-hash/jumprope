@@ -37,9 +37,10 @@ int _int(Object? v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
 class VideoRecorder {
   static const MethodChannel _channel = MethodChannel('com.jumprope/video');
 
-  Future<String?> start() async {
+  Future<String?> start({bool withAudio = true}) async {
     final map = await _channel.invokeMapMethod<String, dynamic>(
       'startRecording',
+      {'withAudio': withAudio},
     );
     return map?['path'] as String?;
   }
@@ -61,4 +62,7 @@ class VideoRecorder {
 
   Future<bool> isRecording() async =>
       await _channel.invokeMethod<bool>('isRecording') ?? false;
+
+  Future<bool> getVideoSupport() async =>
+      await _channel.invokeMethod<bool>('getVideoSupport') ?? false;
 }

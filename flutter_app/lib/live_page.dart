@@ -391,7 +391,21 @@ class _LivePageState extends State<LivePage> {
     if (_recording || _recordedVideo != null || _videoStarting) return;
     _videoStarting = true;
     try {
-      final path = await _video.start();
+      final supported = await _video.getVideoSupport();
+      if (!supported) {
+        setState(() => _recordRequested = false);
+        _snack('此设备不支持边录像边计数');
+        return;
+      }
+      String? path;
+      try {
+        path = await _video.start(withAudio: true);
+      } on PlatformException catch (e) {
+        if (e.code != 'audio_permission_denied') rethrow;
+        // 不授权麦克风时退化成无声录像，至少别让用户白跳
+        path = await _video.start(withAudio: false);
+        _snack('麦克风未授权，本次录像无声');
+      }
       if (!mounted) {
         await _video.stop();
         return;
@@ -412,6 +426,17 @@ class _LivePageState extends State<LivePage> {
         _videoPaused = false;
         _videoStartOffsetMs = _state.activeMs;
       });
+      // 有的机型会「启动成功但立刻 Finalize」：500ms 后确认真的在录。
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      if (!mounted || !_recording) return;
+      final alive = await _video.isRecording();
+      if (!alive && mounted) {
+        setState(() {
+          _recording = false;
+          _recordRequested = false;
+        });
+        _snack('录像启动失败：设备不支持或编码器错误');
+      }
     } on PlatformException catch (e) {
       if (!mounted) return;
       setState(() => _recordRequested = false);
@@ -431,8 +456,9 @@ class _LivePageState extends State<LivePage> {
     if (_recording) {
       try {
         info = await _video.stop();
-      } catch (_) {
+      } catch (e) {
         info = null;
+        _snack('录像保存失败：$e');
       }
       _recording = false;
       _videoPaused = false;
@@ -671,6 +697,16 @@ class _LivePageState extends State<LivePage> {
                 if (active) ...[
                   const SizedBox(height: 10),
                   GestureDetector(onLongPress: _loadDiag, child: _statusPill()),
+                  if (!_recording &&
+                      (_state.phase == SessionPhase.positioning ||
+                          _state.phase == SessionPhase.countdown)) ...[
+                    const SizedBox(height: 8),
+                    _hintPill('点左上角摄像机可录像'),
+                  ],
+                  if (_recording) ...[
+                    const SizedBox(height: 8),
+                    _recPill('录像中 · 保留 3 天'),
+                  ],
                   if ((_source?.frameCount ?? 0) == 0) ...[
                     const SizedBox(height: 8),
                     _hintPill('相机没有输出画面（权限或初始化失败）'),
@@ -1027,6 +1063,32 @@ class _LivePageState extends State<LivePage> {
               color: warn ? const Color(0xFFFFC266) : Colors.white,
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _recPill(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.7)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(
+              color: Colors.redAccent,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(text, style: const TextStyle(fontSize: 12, color: Colors.white)),
         ],
       ),
     );
