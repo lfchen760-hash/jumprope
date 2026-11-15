@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/child_profile.dart';
 import '../data/data_repository.dart';
+import '../data/app_permissions.dart';
 import '../data/date_utils.dart';
 import '../data/session_record.dart';
 import '../live_page.dart';
@@ -83,6 +84,30 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _startSession() async {
+    // 进计数页前一次性把相机 + 麦克风都申请完，进去后不再弹权限
+    final permissions = await requestSessionPermissions();
+    if (!mounted) return;
+    if (!permissions.camera) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('需要相机权限'),
+          content: const Text('跳绳计数需要使用相机。请在系统设置里允许相机权限后再试。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    if (!permissions.audio) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('麦克风未授权，本次录像将无声')));
+    }
+
     final previous = _last;
     final best = _best ?? 0;
     final action = await Navigator.of(context).push<String>(
@@ -92,6 +117,7 @@ class _HomePageState extends State<HomePage> {
           nickname: _profile.nickname,
           previous: previous,
           previousBest: best,
+          audioGranted: permissions.audio,
         ),
       ),
     );

@@ -287,6 +287,9 @@ MOVE_X_MAX=0.25  TILT_MAX=35   KNEE_MIN=100
   麦克风权限被拒时自动改录无声视频；启动 500ms 后查 `isRecording`，防止
   “启动成功但立刻 Finalize”导致没有文件。结果页入口在数字下方，记录列表
   用「看录像」文字入口；不要只放小图标（用户找不到）。
+- 权限入口：`MainActivity` **不再**自动申请 CAMERA；首页 `_startSession`
+  调 `requestSessionPermissions()` 一次申请 CAMERA + RECORD_AUDIO，
+  再进 `LivePage(audioGranted: ...)`。不要在 live_page 里再加权限弹窗。
 - 会话结束（`finished`）时 `SessionSaver` 自动写一条 `SessionRecord`：
   `SessionResult` → `SessionRecord.fromResult` → `DataRepository.saveSession`。
   只写一次；0 跳会话也存，但 `valid=false`（`no_jumps`），不进统计。

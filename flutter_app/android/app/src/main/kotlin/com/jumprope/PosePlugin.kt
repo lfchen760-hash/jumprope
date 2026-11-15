@@ -79,8 +79,10 @@ class PosePlugin :
     private var activityBinding: ActivityPluginBinding? = null
     private var pendingStartResult: MethodChannel.Result? = null
     private var pendingStartWithAudio = true
+    private var pendingPermissionResult: MethodChannel.Result? = null
     private var pendingStopResult: MethodChannel.Result? = null
     private val audioRequestCode = 1002
+    private val permissionRequestCode = 1003
 
     private val main = Handler(Looper.getMainLooper())
     private val videoExecutor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -217,6 +219,27 @@ class PosePlugin :
         permissions: Array<out String>,
         grantResults: IntArray,
     ): Boolean {
+        if (requestCode == permissionRequestCode) {
+            val pending = pendingPermissionResult
+            pendingPermissionResult = null
+            pending?.success(
+                mapOf(
+                    "camera" to (
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.CAMERA,
+                        ) == PackageManager.PERMISSION_GRANTED
+                    ),
+                    "audio" to (
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO,
+                        ) == PackageManager.PERMISSION_GRANTED
+                    ),
+                ),
+            )
+            return true
+        }
         if (requestCode != audioRequestCode) return false
         val pending = pendingStartResult
         pendingStartResult = null
@@ -425,6 +448,45 @@ class PosePlugin :
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            "requestPermissions" -> {
+                val act = activity
+                if (act == null) {
+                    result.error("no_activity", "页面还没准备好", null)
+                    return
+                }
+                if (pendingPermissionResult != null) {
+                    result.error("busy", "权限弹窗还在等待", null)
+                    return
+                }
+                val needed = mutableListOf<String>()
+                if (ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.CAMERA,
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    needed.add(Manifest.permission.CAMERA)
+                }
+                if (ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.RECORD_AUDIO,
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    needed.add(Manifest.permission.RECORD_AUDIO)
+                }
+                if (needed.isEmpty()) {
+                    result.success(
+                        mapOf("camera" to true, "audio" to true),
+                    )
+                    return
+                }
+                pendingPermissionResult = result
+                ActivityCompat.requestPermissions(
+                    act,
+                    needed.toTypedArray(),
+                    permissionRequestCode,
+                )
+            }
+
             "init" -> {
                 val asset = call.argument<String>("modelAsset") ?: "pose_landmarker_lite.task"
                 val gpu = call.argument<Boolean>("useGpu") ?: true

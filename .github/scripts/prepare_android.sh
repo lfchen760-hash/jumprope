@@ -20,8 +20,6 @@ mkdir -p "$PKG_DIR"
 cat > "$MAIN_KT" <<'KT'
 package com.jumprope.jumprope_app
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
@@ -46,14 +44,6 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
         makeFlutterTransparent(findViewById(android.R.id.content))
-        ensureCameraPermission()
-    }
-
-    /** Android 6+ 必须运行时申请相机权限，否则 CameraX 直接抛异常 */
-    private fun ensureCameraPermission() {
-        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.CAMERA), 1001)
-        }
     }
 
     private fun makeFlutterTransparent(v: View) {

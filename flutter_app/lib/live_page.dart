@@ -29,6 +29,7 @@ class LivePage extends StatefulWidget {
     required this.nickname,
     this.previous,
     this.previousBest = 0,
+    this.audioGranted = true,
   });
 
   /// 0 = 自由跳
@@ -36,6 +37,9 @@ class LivePage extends StatefulWidget {
   final String nickname;
   final SessionRecord? previous;
   final int previousBest;
+
+  /// 首页进入前已经拿到的麦克风权限；false 时录像直接无声，不再弹窗。
+  final bool audioGranted;
 
   @override
   State<LivePage> createState() => _LivePageState();
@@ -401,13 +405,18 @@ class _LivePageState extends State<LivePage> {
         return;
       }
       String? path;
-      try {
-        path = await _video.start(withAudio: true);
-      } on PlatformException catch (e) {
-        if (e.code != 'audio_permission_denied') rethrow;
-        // 不授权麦克风时退化成无声录像，至少别让用户白跳
+      if (!widget.audioGranted) {
         path = await _video.start(withAudio: false);
         _snack('麦克风未授权，本次录像无声');
+      } else {
+        try {
+          path = await _video.start(withAudio: true);
+        } on PlatformException catch (e) {
+          if (e.code != 'audio_permission_denied') rethrow;
+          // 授权后又被系统收回时退化成无声，至少别让用户白跳
+          path = await _video.start(withAudio: false);
+          _snack('麦克风未授权，本次录像无声');
+        }
       }
       if (!mounted) {
         await _video.stop();
