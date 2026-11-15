@@ -1,0 +1,7 @@
+Analyzing flutter_app...                                        
+
+warning • Unused import: 'theme.dart'. Try removing the import directive • lib/app/video_player_page.dart:10:8 • unused_import
+  error • The method '_controls' isn't defined for the type '_SessionVideoPageState'. Try correcting the name to the name of an existing method, or defining a method named '_controls' • lib/app/video_player_page.dart:174:19 • undefined_method
+warning • The declaration '_fmt' isn't referenced. Try removing the declaration of '_fmt' • lib/app/video_player_page.dart:200:10 • unused_element
+
+3 issues found. (ran in 5.3s)
