@@ -285,7 +285,8 @@ MOVE_X_MAX=0.25  TILT_MAX=35   KNEE_MIN=100
   只保留 3 天（`VideoStore.cleanup()` 启动时执行）；删会话时删文件 + 行。
   `start_offset_ms` = 开始录制时会话的活动时间，后期把 jumps 映射到视频。
   麦克风权限被拒时自动改录无声视频；启动 500ms 后查 `isRecording`，防止
-  “启动成功但立刻 Finalize”导致没有文件。
+  “启动成功但立刻 Finalize”导致没有文件。结果页入口在数字下方，记录列表
+  用「看录像」文字入口；不要只放小图标（用户找不到）。
 - 会话结束（`finished`）时 `SessionSaver` 自动写一条 `SessionRecord`：
   `SessionResult` → `SessionRecord.fromResult` → `DataRepository.saveSession`。
   只写一次；0 跳会话也存，但 `valid=false`（`no_jumps`），不进统计。

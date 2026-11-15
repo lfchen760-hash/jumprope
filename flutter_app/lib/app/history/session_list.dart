@@ -195,19 +195,6 @@ class _SessionTile extends StatelessWidget {
                             ),
                           ),
                         ),
-                      if (video != null && onOpenVideo != null)
-                        IconButton(
-                          onPressed: () => onOpenVideo!(video!),
-                          icon: const Icon(Icons.play_circle_outline, size: 18),
-                          color: AppColors.inkSoft,
-                          tooltip: '查看录像',
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 28,
-                            minHeight: 28,
-                          ),
-                        ),
                       if (onDelete != null) ...[
                         const SizedBox(width: 2),
                         IconButton(
@@ -235,6 +222,32 @@ class _SessionTile extends StatelessWidget {
                       color: AppColors.muted,
                     ),
                   ),
+                  if (video != null && onOpenVideo != null) ...[
+                    const SizedBox(height: 4),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => onOpenVideo!(video!),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.play_circle_outline,
+                            size: 15,
+                            color: AppColors.brandOrange,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            '看录像',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.brandOrange,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

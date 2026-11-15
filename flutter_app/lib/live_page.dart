@@ -73,6 +73,7 @@ class _LivePageState extends State<LivePage> {
   bool _videoStarting = false;
   int _videoStartOffsetMs = 0;
   RecordedVideo? _recordedVideo;
+  String? _videoError;
 
   bool get _active =>
       _state.phase == SessionPhase.running ||
@@ -204,8 +205,8 @@ class _LivePageState extends State<LivePage> {
       );
       try {
         await _repo.saveVideo(videoRow);
-      } catch (_) {
-        // 录像元数据失败不影响成绩
+      } catch (e) {
+        _videoError = '元数据保存失败：$e';
       }
     }
 
@@ -221,6 +222,7 @@ class _LivePageState extends State<LivePage> {
           previousBest: widget.previousBest,
           saveError: saveError,
           video: videoRow,
+          videoError: _videoError,
         ),
       ),
     );
@@ -394,7 +396,8 @@ class _LivePageState extends State<LivePage> {
       final supported = await _video.getVideoSupport();
       if (!supported) {
         setState(() => _recordRequested = false);
-        _snack('此设备不支持边录像边计数');
+        _videoError = '此设备不支持边录像边计数';
+        _snack(_videoError!);
         return;
       }
       String? path;
@@ -425,6 +428,7 @@ class _LivePageState extends State<LivePage> {
         _recordRequested = false;
         _videoPaused = false;
         _videoStartOffsetMs = _state.activeMs;
+        _videoError = null;
       });
       // 有的机型会「启动成功但立刻 Finalize」：500ms 后确认真的在录。
       await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -435,16 +439,19 @@ class _LivePageState extends State<LivePage> {
           _recording = false;
           _recordRequested = false;
         });
-        _snack('录像启动失败：设备不支持或编码器错误');
+        _videoError = '设备不支持或编码器错误';
+        _snack('录像启动失败：$_videoError');
       }
     } on PlatformException catch (e) {
       if (!mounted) return;
       setState(() => _recordRequested = false);
-      _snack('录像启动失败：${e.message ?? e.code}');
+      _videoError = e.message ?? e.code;
+      _snack('录像启动失败：$_videoError');
     } catch (e) {
       if (!mounted) return;
       setState(() => _recordRequested = false);
-      _snack('录像启动失败：$e');
+      _videoError = '$e';
+      _snack('录像启动失败：$_videoError');
     } finally {
       _videoStarting = false;
     }
@@ -458,6 +465,7 @@ class _LivePageState extends State<LivePage> {
         info = await _video.stop();
       } catch (e) {
         info = null;
+        _videoError = '保存失败：$e';
         _snack('录像保存失败：$e');
       }
       _recording = false;

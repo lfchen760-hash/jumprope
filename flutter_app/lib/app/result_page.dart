@@ -18,6 +18,7 @@ class ResultPage extends StatelessWidget {
     this.previousBest = 0,
     this.saveError,
     this.video,
+    this.videoError,
   });
 
   final SessionRecord record;
@@ -30,6 +31,9 @@ class ResultPage extends StatelessWidget {
 
   /// 本次会话的原始录像；没录则为 null。
   final SessionVideo? video;
+
+  /// 点了录像但没生成文件时的原因。
+  final String? videoError;
 
   bool get _isRecord => record.valid && record.count > previousBest;
 
@@ -162,6 +166,49 @@ class ResultPage extends StatelessWidget {
                       ),
                     ),
                   ],
+                  if (video != null) ...[
+                    const SizedBox(height: 12),
+                    Center(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => SessionVideoPage(video: video!),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.play_circle_outline, size: 20),
+                        label: const Text('查看本次录像'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.brandOrange,
+                          side: const BorderSide(color: AppColors.brandOrange),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 10,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Center(
+                      child: Text(
+                        '原始录像保留 3 天',
+                        style: TextStyle(fontSize: 10, color: AppColors.muted),
+                      ),
+                    ),
+                  ] else if (videoError != null) ...[
+                    const SizedBox(height: 12),
+                    Center(
+                      child: Text(
+                        '录像未生成：$videoError',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFFC62828),
+                        ),
+                      ),
+                    ),
+                  ],
                   if (saveError != null) ...[
                     const SizedBox(height: 14),
                     Container(
@@ -227,29 +274,6 @@ class ResultPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
                   _RhythmCard(segments: segments, activeMs: record.activeMs),
-                  if (video != null) ...[
-                    const SizedBox(height: 14),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => SessionVideoPage(video: video!),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.play_circle_outline, size: 18),
-                      label: const Text('查看原始录像'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.ink,
-                        side: const BorderSide(color: AppColors.line),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      '录像保留 3 天',
-                      style: TextStyle(fontSize: 10, color: AppColors.muted),
-                    ),
-                  ],
                   const SizedBox(height: 24),
                   GradientButton(
                     label: '再来一组',
