@@ -290,6 +290,10 @@ MOVE_X_MAX=0.25  TILT_MAX=35   KNEE_MIN=100
 - 1080p：CameraX `Quality.FHD` 优先，失败降级 HD/SD；导出用 Media3
   Transformer + `BitmapOverlay`，按 `jumps`/`start_offset_ms` 画计数和倒计时。
   导出文件在 cache，完成后写 MediaStore（Movies/跳绳）；分享用 content URI。
+- Media3 版本必须和 `video_player` 解析到的一致（当前 **1.9.0**）。1.6 起
+  `OverlaySettings` 从 `androidx.media3.effect` 移到 `androidx.media3.common`，
+  Builder 改为 `StaticOverlaySettings.Builder`；再用 1.4.1 会在导出时
+  `NoClassDefFoundError`。
 - TTS 数字必须先过 `numberToChinese()`，否则 110 会被读成「幺幺零」；
   不要直接 `say('$count')`。
 - 权限入口：`MainActivity` **不再**自动申请 CAMERA；首页 `_startSession`
