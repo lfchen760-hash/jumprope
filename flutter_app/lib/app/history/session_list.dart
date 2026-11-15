@@ -26,7 +26,7 @@ class SessionList extends StatelessWidget {
   final bool truncated;
   final ValueChanged<SessionRecord>? onDelete;
   final Map<String, SessionVideo> videos;
-  final ValueChanged<SessionVideo>? onOpenVideo;
+  final void Function(SessionRecord, SessionVideo)? onOpenVideo;
 
   @override
   Widget build(BuildContext context) {
@@ -138,7 +138,7 @@ class _SessionTile extends StatelessWidget {
   final SessionRecord session;
   final ValueChanged<SessionRecord>? onDelete;
   final SessionVideo? video;
-  final ValueChanged<SessionVideo>? onOpenVideo;
+  final void Function(SessionRecord, SessionVideo)? onOpenVideo;
 
   @override
   Widget build(BuildContext context) {
@@ -226,7 +226,7 @@ class _SessionTile extends StatelessWidget {
                     const SizedBox(height: 4),
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTap: () => onOpenVideo!(video!),
+                      onTap: () => onOpenVideo!(session, video!),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [

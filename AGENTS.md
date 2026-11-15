@@ -287,6 +287,11 @@ MOVE_X_MAX=0.25  TILT_MAX=35   KNEE_MIN=100
   麦克风权限被拒时自动改录无声视频；启动 500ms 后查 `isRecording`，防止
   “启动成功但立刻 Finalize”导致没有文件。结果页入口在数字下方，记录列表
   用「看录像」文字入口；不要只放小图标（用户找不到）。
+- 1080p：CameraX `Quality.FHD` 优先，失败降级 HD/SD；导出用 Media3
+  Transformer + `BitmapOverlay`，按 `jumps`/`start_offset_ms` 画计数和倒计时。
+  导出文件在 cache，完成后写 MediaStore（Movies/跳绳）；分享用 content URI。
+- TTS 数字必须先过 `numberToChinese()`，否则 110 会被读成「幺幺零」；
+  不要直接 `say('$count')`。
 - 权限入口：`MainActivity` **不再**自动申请 CAMERA；首页 `_startSession`
   调 `requestSessionPermissions()` 一次申请 CAMERA + RECORD_AUDIO，
   再进 `LivePage(audioGranted: ...)`。不要在 live_page 里再加权限弹窗。

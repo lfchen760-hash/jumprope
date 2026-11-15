@@ -173,7 +173,10 @@ class ResultPage extends StatelessWidget {
                         onPressed: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => SessionVideoPage(video: video!),
+                              builder: (_) => SessionVideoPage(
+                                video: video!,
+                                record: record,
+                              ),
                             ),
                           );
                         },

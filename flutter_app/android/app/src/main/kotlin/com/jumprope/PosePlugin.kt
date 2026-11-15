@@ -77,6 +77,9 @@ class PosePlugin :
     private var videoChannel: MethodChannel? = null
     private var videoEventChannel: EventChannel? = null
     private var videoSink: EventChannel.EventSink? = null
+    private var exportChannel: EventChannel? = null
+    private var exportSink: EventChannel.EventSink? = null
+    private var exporter: VideoExporter? = null
     private var activityBinding: ActivityPluginBinding? = null
     private var pendingStartResult: MethodChannel.Result? = null
     private var pendingStartWithAudio = true
@@ -163,6 +166,18 @@ class PosePlugin :
                 }
             })
         }
+        exportChannel = EventChannel(binding.binaryMessenger, "com.jumprope/video_export").also {
+            it.setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    exportSink = events
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    exportSink = null
+                }
+            })
+        }
+        exporter = VideoExporter(context)
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -180,6 +195,11 @@ class PosePlugin :
         videoEventChannel?.setStreamHandler(null)
         videoEventChannel = null
         videoSink = null
+        exportChannel?.setStreamHandler(null)
+        exportChannel = null
+        exportSink = null
+        exporter?.cancel()
+        exporter = null
         channel = null
         eventChannel = null
         camera?.dispose()
@@ -327,6 +347,58 @@ class PosePlugin :
 
             "isRecording" -> result.success(camera?.isRecording == true)
             "getVideoSupport" -> result.success(camera?.videoBound == true)
+
+            "exportOverlay" -> {
+                val rawPath = call.argument<String>("rawPath")
+                val jumps = call.argument<List<*>>("jumps")
+                    ?.mapNotNull { (it as? Number)?.toInt() }
+                    ?.toIntArray()
+                val startOffsetMs = call.argument<Number>("startOffsetMs")?.toLong() ?: 0L
+                val durationSec = call.argument<Number>("durationSec")?.toInt() ?: 0
+                val ex = exporter
+                if (rawPath == null || jumps == null || ex == null) {
+                    result.error("bad_args", "导出参数不完整", null)
+                    return
+                }
+                ex.start(
+                    rawPath = rawPath,
+                    jumps = jumps,
+                    startOffsetMs = startOffsetMs,
+                    durationSec = durationSec,
+                    onProgress = { p ->
+                        main.post {
+                            exportSink?.success(mapOf("event" to "progress", "progress" to p))
+                        }
+                    },
+                    onDone = { path, uri ->
+                        exportSink?.success(
+                            mapOf("event" to "completed", "path" to path, "uri" to uri),
+                        )
+                    },
+                    onError = { msg ->
+                        exportSink?.success(
+                            mapOf("event" to "error", "message" to msg),
+                        )
+                    },
+                )
+                result.success(true)
+            }
+
+            "cancelExport" -> {
+                exporter?.cancel()
+                result.success(null)
+            }
+
+            "shareVideo" -> {
+                val uri = call.argument<String>("uri")
+                if (uri.isNullOrBlank()) {
+                    result.error("bad_args", "没有可分享的视频", null)
+                } else {
+                    exporter?.share(uri)
+                    result.success(null)
+                }
+            }
+
             else -> result.notImplemented()
         }
     }

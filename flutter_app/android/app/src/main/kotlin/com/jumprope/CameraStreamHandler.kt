@@ -151,7 +151,7 @@ class CameraStreamHandler(
         val newRecorder = Recorder.Builder()
             .setQualitySelector(
                 QualitySelector.fromOrderedList(
-                    listOf(Quality.HD, Quality.SD),
+                    listOf(Quality.FHD, Quality.HD, Quality.SD),
                     FallbackStrategy.lowerQualityOrHigherThan(Quality.SD),
                 ),
             )

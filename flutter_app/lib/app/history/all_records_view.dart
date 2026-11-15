@@ -19,7 +19,7 @@ class AllRecordsView extends StatelessWidget {
   final String today;
   final ValueChanged<SessionRecord> onDelete;
   final Map<String, SessionVideo> videos;
-  final ValueChanged<SessionVideo> onOpenVideo;
+  final void Function(SessionRecord, SessionVideo) onOpenVideo;
 
   @override
   Widget build(BuildContext context) {

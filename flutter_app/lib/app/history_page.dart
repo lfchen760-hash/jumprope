@@ -189,7 +189,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 today: today,
                 onDelete: _confirmDelete,
                 videos: _videos,
-                onOpenVideo: (v) => openVideoPage(context, v),
+                onOpenVideo: (s, v) => openVideoPage(context, v, s),
               )
             else ...[
               PeriodTabs(selected: _kind, onChanged: _selectKind),
@@ -235,7 +235,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 truncated: inRange.length > visible.length,
                 onDelete: _confirmDelete,
                 videos: _videos,
-                onOpenVideo: (v) => openVideoPage(context, v),
+                onOpenVideo: (s, v) => openVideoPage(context, v, s),
               ),
             ],
           ],

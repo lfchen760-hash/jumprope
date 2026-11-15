@@ -7,6 +7,7 @@ import 'package:jumprope_core/jumprope_core.dart';
 
 import 'app/result_page.dart';
 import 'build_info.dart';
+import 'data/chinese_number.dart';
 import 'data/data_repository.dart';
 import 'data/pose/camera_pose_source.dart';
 import 'data/pose/mediapipe_landmarker.dart';
@@ -101,7 +102,7 @@ class _LivePageState extends State<LivePage> {
         void announce() {
           if (!mounted) return;
           _tick.play(high: n == 1);
-          _voice.say('$n');
+          _voice.say(numberToChinese(n));
           n--;
         }
 
@@ -124,7 +125,7 @@ class _LivePageState extends State<LivePage> {
         _voice.say('已暂停');
       } else if (s.phase == SessionPhase.finished) {
         _tick.play(high: true);
-        _voice.say('时间到，共 ${s.count} 次');
+        _voice.say('时间到，共${numberToChinese(s.count)}次');
         unawaited(_finishAndShowResult());
       }
     }

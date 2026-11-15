@@ -1,5 +1,7 @@
 import 'package:flutter_tts/flutter_tts.dart';
 
+import 'data/chinese_number.dart';
+
 /// 语音播报：倒数、跳数、结束总结、取景提示。
 ///
 /// 用系统 TTS，不打包音频文件；中文引擎缺失时静默降级（只是没声音）。
@@ -24,7 +26,8 @@ class VoiceService {
       final langs = await _tts.getLanguages;
       final avail = await _tts.isLanguageAvailable('zh-CN');
       final set = await _tts.setLanguage('zh-CN');
-      status = 'engines=${engines is List ? engines.length : engines} '
+      status =
+          'engines=${engines is List ? engines.length : engines} '
           'langs=${langs is List ? langs.length : langs} '
           'zhAvail=$avail setLang=$set';
       await _tts.setSpeechRate(0.52);
@@ -66,7 +69,7 @@ class VoiceService {
     if (count <= 0 || count % step != 0) return;
     if (count == _lastAnnouncedCount) return;
     _lastAnnouncedCount = count;
-    await say('$count');
+    await say(numberToChinese(count));
   }
 
   void resetCount() => _lastAnnouncedCount = 0;
