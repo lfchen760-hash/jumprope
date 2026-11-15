@@ -460,6 +460,7 @@ class _LivePageState extends State<LivePage> {
   /// 停止录像；discard=true 时把文件删掉（放弃本次训练）。
   Future<RecordedVideo?> _stopVideo({bool discard = false}) async {
     var info = _recordedVideo;
+    final wasRecording = _recording;
     if (_recording) {
       try {
         info = await _video.stop();
@@ -470,6 +471,9 @@ class _LivePageState extends State<LivePage> {
       }
       _recording = false;
       _videoPaused = false;
+    }
+    if (wasRecording && info == null && _videoError == null) {
+      _videoError = '录像文件未生成';
     }
     _recordedVideo = info;
     if (discard && info != null) {
