@@ -196,6 +196,10 @@ cat > "$APP_DIR/android/app/proguard-rules.pro" <<'PROGUARD'
 -keep class com.google.common.flogger.** { *; }
 -dontwarn com.google.mediapipe.proto.CalculatorProfileProto$CalculatorProfile
 -dontwarn com.google.mediapipe.proto.GraphTemplateProto$CalculatorGraphTemplate
+
+# Media3 Transformer / Effect 走 GL + 反射，R8 容易把 shader/overlay 相关类裁掉
+-keep class androidx.media3.** { *; }
+-keep class com.google.common.** { *; }
 PROGUARD
 
 python3 - "$APP_DIR" "$APP_DIR/android/app/build.gradle.kts" <<'PYPATCH'

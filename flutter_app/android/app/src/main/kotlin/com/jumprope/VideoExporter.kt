@@ -15,6 +15,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.provider.MediaStore
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
@@ -56,6 +57,25 @@ class VideoExporter(private val context: Context) {
         get() = running
 
     fun start(
+        rawPath: String,
+        jumps: IntArray,
+        startOffsetMs: Long,
+        durationSec: Int,
+        onProgress: (Float) -> Unit,
+        onDone: (String, String) -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        try {
+            startInternal(rawPath, jumps, startOffsetMs, durationSec, onProgress, onDone, onError)
+        } catch (t: Throwable) {
+            running = false
+            stopProgress()
+            Log.e("VideoExporter", "export failed", t)
+            onError("${t.javaClass.simpleName}: ${t.message ?: ""}")
+        }
+    }
+
+    private fun startInternal(
         rawPath: String,
         jumps: IntArray,
         startOffsetMs: Long,
