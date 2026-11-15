@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaMetadataRetriever
 import android.media.SoundPool
 import android.os.Environment
@@ -133,9 +134,13 @@ class PosePlugin :
                 when (call.method) {
                     "playTick" -> {
                         val high = call.argument<Boolean>("high") ?: false
+                        // 以高音源为准：实测它在所有机型上都能发声。
+                        // 普通跳 1.0 倍，整十次 1.25 倍，保留音高区分。
+                        val id = if (tickHighId != 0) tickHighId else tickLowId
                         soundPool?.play(
-                            if (high) tickHighId else tickLowId,
-                            1f, 1f, 1, 0, 1f
+                            id,
+                            1f, 1f, 1, 0,
+                            if (high) 1.25f else 1.0f,
                         )
                         result.success(null)
                     }
@@ -534,6 +539,13 @@ class PosePlugin :
                     .append(processor?.lastError?.ifBlank { "ok" } ?: "未调用 init")
                     .append('\n')
                 sb.append("camera=").append(camera?.diagnostics() ?: "未启动").append('\n')
+                val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                sb.append("sound=low:").append(tickLowId)
+                    .append(" high:").append(tickHighId)
+                    .append(" mediaVol:").append(am?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: -1)
+                    .append('/').append(am?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: -1)
+                    .append(" mode:").append(am?.mode ?: -1)
+                    .append('\n')
                 result.success(sb.toString())
             }
 

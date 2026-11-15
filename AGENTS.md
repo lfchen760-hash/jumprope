@@ -360,6 +360,12 @@ const post = postureOf(toLm(lm));
 
 判断有没有踩：抽查黄金向量里 `tilt` 是否全为 0。全 0 就是踩了。
 
+### 每跳没声音，但倒数/开始/结束有
+
+说明 SoundPool 和媒体音量正常，问题在「普通跳」用的低音源或触发路径。
+现在 `playTick` 统一用 `tickHighId`（整十次 rate 1.25），不再依赖低音文件；
+诊断面板会打出 `sound=low:x high:y mediaVol:... mode:...`。排查时先长按状态胶囊。
+
 ### release 构建会压掉「动态引用」的 res/raw
 
 音效资源一开始用 `resources.getIdentifier("tick_low","raw",packageName)` 加载，
