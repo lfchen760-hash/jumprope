@@ -179,6 +179,75 @@ class _SessionVideoPageState extends State<SessionVideoPage> {
     );
   }
 
+  Widget _controls() {
+    final controller = _controller!;
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final value = controller.value;
+        final total = value.duration;
+        final pos = value.position;
+        return Container(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 18),
+          color: Colors.black,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              VideoProgressIndicator(
+                controller,
+                allowScrubbing: true,
+                colors: const VideoProgressColors(
+                  playedColor: AppColors.brandOrange,
+                  bufferedColor: Colors.white24,
+                  backgroundColor: Colors.white12,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: () {
+                      if (value.isPlaying) {
+                        controller.pause();
+                      } else {
+                        controller.play();
+                      }
+                    },
+                    icon: Icon(
+                      value.isPlaying
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${_fmt(pos)} / ${_fmt(total)}',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  const Spacer(),
+                  if (widget.video.width > 0)
+                    Text(
+                      '${widget.video.width}×${widget.video.height}',
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 11,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _exportPanel() {
     return VideoExportPanel(
       exporting: _exporting,
