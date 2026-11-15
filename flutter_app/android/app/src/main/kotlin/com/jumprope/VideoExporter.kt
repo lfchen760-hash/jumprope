@@ -27,6 +27,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.BitmapOverlay
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.common.OverlaySettings
+import androidx.media3.effect.StaticOverlaySettings
 import androidx.media3.effect.TextureOverlay
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
@@ -221,7 +222,7 @@ private class CountOverlay(
     private var height = 2
     private var lastBitmap: Bitmap? = null
     private var lastKey = ""
-    private val settings = OverlaySettings.Builder()
+    private val settings: OverlaySettings = StaticOverlaySettings.Builder()
         .setScale(2f, 2f)
         .build()
 
