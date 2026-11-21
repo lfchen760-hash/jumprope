@@ -215,4 +215,17 @@ void main() {
     expect(copy.sessions.first.count, 168);
     expect(copy.settings.installId, isNotEmpty);
   });
+
+  test('auto record defaults on and roundtrips', () {
+    final defaults = AppSettings.defaults();
+    expect(defaults.autoRecord, isTrue);
+
+    final off = defaults.copyWith(autoRecord: false);
+    expect(off.autoRecord, isFalse);
+    expect(AppSettings.fromJson(off.toJson()).autoRecord, isFalse);
+
+    // 旧版本导出/存库的 JSON 没有这个字段：必须继续默认开
+    final legacy = AppSettings.fromJson({'installId': 'abc'});
+    expect(legacy.autoRecord, isTrue);
+  });
 }

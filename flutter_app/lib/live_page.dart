@@ -71,7 +71,7 @@ class _LivePageState extends State<LivePage> {
   bool _handledFinish = false;
   int _lastSoundCount = 0;
 
-  // 录像：手动开，最多一段；startOffset 用于把 jumps 映射到视频时间
+  // 录像：默认自动开（设置里可关），最多一段；startOffset 映射 jumps 到视频时间
   bool _recordRequested = false;
   bool _recording = false;
   bool _videoPaused = false;
@@ -325,8 +325,11 @@ class _LivePageState extends State<LivePage> {
       try {
         final settings = await _repo.loadSettings();
         _voice.enabled = settings.voiceEnabled;
+        // 默认开：用户不用再记得点摄像机；仍可在定位/倒数阶段手动关
+        _recordRequested = settings.autoRecord;
       } catch (_) {
-        // 读设置失败不影响计数，用默认语音开
+        // 读设置失败不影响计数，用默认语音 + 自动录像开
+        _recordRequested = true;
       }
       await _voice.init();
       await _landmarker.init();
@@ -721,9 +724,10 @@ class _LivePageState extends State<LivePage> {
                   GestureDetector(onLongPress: _loadDiag, child: _statusPill()),
                   if (!_recording &&
                       (_state.phase == SessionPhase.positioning ||
-                          _state.phase == SessionPhase.countdown)) ...[
+                          _state.phase == SessionPhase.countdown) &&
+                      (_recordRequested || _recordedVideo == null)) ...[
                     const SizedBox(height: 8),
-                    _hintPill('点左上角摄像机可录像'),
+                    _hintPill(_recordRequested ? '开始计数后自动录像' : '点左上角摄像机可录像'),
                   ],
                   if (_recording) ...[
                     const SizedBox(height: 8),
@@ -967,10 +971,20 @@ class _LivePageState extends State<LivePage> {
           _circleButton(
             icon: _recording
                 ? Icons.stop_circle_outlined
+                : _recordRequested
+                ? Icons.videocam
                 : Icons.videocam_outlined,
             onTap: _toggleRecord,
-            tooltip: _recording ? '停止录像' : '录制本次',
-            color: _recording ? Colors.redAccent : Colors.white,
+            tooltip: _recording
+                ? '停止录像'
+                : _recordRequested
+                ? '关闭本次自动录像'
+                : '录制本次',
+            color: _recording
+                ? Colors.redAccent
+                : _recordRequested
+                ? const Color(0xFFFFC266)
+                : Colors.white,
           ),
           Expanded(
             child: Center(

@@ -4,6 +4,7 @@ import 'dart:math';
 class AppSettings {
   final bool onboardingDone;
   final bool voiceEnabled;
+  final bool autoRecord; // 默认每次训练自动录像
   final int voiceEvery; // 10 / 20 / 0(不报)
   final bool countSound;
   final bool keepAwake;
@@ -14,6 +15,7 @@ class AppSettings {
   const AppSettings({
     required this.onboardingDone,
     required this.voiceEnabled,
+    required this.autoRecord,
     required this.voiceEvery,
     required this.countSound,
     required this.keepAwake,
@@ -25,6 +27,7 @@ class AppSettings {
   factory AppSettings.defaults() => AppSettings(
     onboardingDone: false,
     voiceEnabled: true,
+    autoRecord: true,
     voiceEvery: 10,
     countSound: false,
     keepAwake: true,
@@ -36,6 +39,7 @@ class AppSettings {
   AppSettings copyWith({
     bool? onboardingDone,
     bool? voiceEnabled,
+    bool? autoRecord,
     int? voiceEvery,
     bool? countSound,
     bool? keepAwake,
@@ -44,6 +48,7 @@ class AppSettings {
   }) => AppSettings(
     onboardingDone: onboardingDone ?? this.onboardingDone,
     voiceEnabled: voiceEnabled ?? this.voiceEnabled,
+    autoRecord: autoRecord ?? this.autoRecord,
     voiceEvery: voiceEvery ?? this.voiceEvery,
     countSound: countSound ?? this.countSound,
     keepAwake: keepAwake ?? this.keepAwake,
@@ -55,6 +60,7 @@ class AppSettings {
   Map<String, dynamic> toJson() => {
     'onboardingDone': onboardingDone,
     'voiceEnabled': voiceEnabled,
+    'autoRecord': autoRecord,
     'voiceEvery': voiceEvery,
     'countSound': countSound,
     'keepAwake': keepAwake,
@@ -68,6 +74,8 @@ class AppSettings {
     return AppSettings(
       onboardingDone: j['onboardingDone'] == true,
       voiceEnabled: j['voiceEnabled'] != false,
+      // 旧版本没有这个字段；录像默认开，读不到也按开处理
+      autoRecord: j['autoRecord'] != false,
       voiceEvery: (j['voiceEvery'] as num?)?.toInt() ?? 10,
       countSound: j['countSound'] == true,
       keepAwake: j['keepAwake'] != false,
