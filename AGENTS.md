@@ -3,7 +3,7 @@
 给接手的 agent（或未来的自己）看的操作手册。
 **只写「不看就会踩坑」的东西**，不写代码细节。
 
-最后更新：2026-11-21
+最后更新：2026-11-25
 
 ---
 
@@ -291,6 +291,9 @@ MOVE_X_MAX=0.25  TILT_MAX=35   KNEE_MIN=100
   改录无声视频；启动 500ms 后查 `isRecording`，防止
   “启动成功但立刻 Finalize”导致没有文件。结果页入口在数字下方，记录列表
   用「看录像」文字入口；不要只放小图标（用户找不到）。
+- 防息屏：训练页进入时按 `AppSettings.keepAwake`（默认 true）调原生
+  `setKeepScreenOn`（`FLAG_KEEP_SCREEN_ON`），结束/离开/`dispose` 时清掉；
+  「我的」页可关。不要改成 MainActivity 无条件加，否则首页/记录页也常亮。
 - 1080p：CameraX `Quality.FHD` 优先，失败降级 HD/SD；导出用 Media3
   Transformer + `BitmapOverlay`，按 `jumps`/`start_offset_ms` 画计数和倒计时。
   导出文件在 cache，完成后写 MediaStore（Movies/跳绳）；分享用 content URI。
@@ -393,6 +396,14 @@ unzip -l app-release.apk | grep wav   # 必须能看到 res/*.wav
 ```
 
 改完音效务必解包确认，不要只看「编译通过」。
+
+### 训练页会息屏
+
+`AppSettings.keepAwake` 一开始只有字段，没有调原生，所以默认 true 也不生效。
+必须由 `LivePage` 调 `PosePlugin.setKeepScreenOn`（`FLAG_KEEP_SCREEN_ON`），
+并在结束/离开/`dispose` 时清掉。排查顺序：设置是否读到、activity 是否非空、
+`PosePlugin` 的 `setKeepScreenOn` 分支有没有进。不要改成 MainActivity 无条件
+加 flag，否则首页/记录页也一直亮。
 
 ### Flutter 3.47 把 material.dart 标记为 deprecated
 

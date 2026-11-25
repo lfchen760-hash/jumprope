@@ -228,4 +228,16 @@ void main() {
     final legacy = AppSettings.fromJson({'installId': 'abc'});
     expect(legacy.autoRecord, isTrue);
   });
+
+  test('keep awake defaults on and roundtrips', () {
+    final defaults = AppSettings.defaults();
+    expect(defaults.keepAwake, isTrue);
+
+    final off = defaults.copyWith(keepAwake: false);
+    expect(off.keepAwake, isFalse);
+    expect(AppSettings.fromJson(off.toJson()).keepAwake, isFalse);
+
+    // 旧库没有这个字段时也要保持常亮
+    expect(AppSettings.fromJson({'installId': 'abc'}).keepAwake, isTrue);
+  });
 }

@@ -13,6 +13,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.view.WindowManager
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -39,6 +40,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *     init(modelAsset: String, useGpu: Boolean) -> Boolean
  *     startCamera(front: Boolean)               -> Boolean
  *     stopCamera()                              -> Unit
+ *     setKeepScreenOn(on: Boolean)              -> Unit     (训练页面防息屏)
  *     processVideo(path: String, fps: Int)      -> Boolean   (调试用，慢)
  *     stopVideo()
  *     dispose()
@@ -200,6 +202,7 @@ class PosePlugin :
         exportSink = null
         exporter?.cancel()
         exporter = null
+        activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         channel = null
         eventChannel = null
         camera?.dispose()
@@ -231,6 +234,7 @@ class PosePlugin :
     }
 
     override fun onDetachedFromActivity() {
+        activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         activityBinding?.removeRequestPermissionsResultListener(this)
         activityBinding = null
         PreviewHolder.detach()
@@ -673,6 +677,21 @@ class PosePlugin :
                 result.success(null)
             }
 
+            "setKeepScreenOn" -> {
+                val on = call.argument<Boolean>("on") ?: true
+                val act = activity
+                if (act == null) {
+                    result.error("no_activity", "页面还没准备好", null)
+                    return
+                }
+                if (on) {
+                    act.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    act.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+                result.success(null)
+            }
+
             "processVideo" -> {
                 val path = call.argument<String>("path")
                 val fps = call.argument<Int>("fps") ?: 30
@@ -689,6 +708,7 @@ class PosePlugin :
             }
 
             "dispose" -> {
+                activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 camera?.dispose()
                 camera = null
                 processor?.close()

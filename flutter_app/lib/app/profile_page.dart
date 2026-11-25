@@ -6,6 +6,7 @@ import '../data/data_repository.dart';
 import '../data/date_utils.dart';
 import 'profile_form_page.dart';
 import 'theme.dart';
+import 'training_settings_card.dart';
 import 'ui.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -21,7 +22,6 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   ChildProfile _profile = ChildProfile.defaults;
   int _goal = 300;
-  bool _autoRecord = true;
   bool _loading = true;
 
   @override
@@ -34,30 +34,15 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final profile = await widget.repo.loadProfile();
       final goal = await widget.repo.goalForDate(todayLocalDate());
-      final settings = await widget.repo.loadSettings();
       if (!mounted) return;
       setState(() {
         _profile = profile ?? ChildProfile.defaults;
         _goal = goal;
-        _autoRecord = settings.autoRecord;
         _loading = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _setAutoRecord(bool value) async {
-    setState(() => _autoRecord = value);
-    try {
-      final settings = await widget.repo.loadSettings();
-      await widget.repo.saveSettings(settings.copyWith(autoRecord: value));
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _autoRecord = !value);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('设置保存失败')));
     }
   }
 
@@ -160,30 +145,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
           const SizedBox(height: 14),
-          AppCard(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-            child: SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _autoRecord,
-              onChanged: _setAutoRecord,
-              title: const Text(
-                '每次训练自动录像',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
-                ),
-              ),
-              subtitle: const Text(
-                '开始计数后自动录制，可在计数页点摄像机停止；录像只保留 3 天',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.muted,
-                  height: 1.5,
-                ),
-              ),
-            ),
-          ),
+          TrainingSettingsCard(repo: widget.repo),
           const SizedBox(height: 14),
           const AppCard(
             child: Column(

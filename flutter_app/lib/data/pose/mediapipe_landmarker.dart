@@ -96,6 +96,19 @@ class MediaPipeLandmarker {
 
   Future<void> stopCamera() => _method.invokeMethod<void>('stopCamera');
 
+  /// 训练页保持屏幕常亮（原生 FLAG_KEEP_SCREEN_ON）。
+  ///
+  /// 只是体验开关，失败不影响计数；旧原生包没有这个方法时静默忽略。
+  Future<void> setKeepScreenOn(bool on) async {
+    try {
+      await _method.invokeMethod<void>('setKeepScreenOn', {'on': on});
+    } on PlatformException {
+      // 旧包 / activity 未就绪
+    } on MissingPluginException {
+      // 旧包
+    }
+  }
+
   /// 调试：逐帧解码本地视频（很慢，只用于离线验证）
   Future<bool> processVideo(String path, {int fps = 30}) async =>
       await _method.invokeMethod<bool>('processVideo', {

@@ -327,9 +327,12 @@ class _LivePageState extends State<LivePage> {
         _voice.enabled = settings.voiceEnabled;
         // 默认开：用户不用再记得点摄像机；仍可在定位/倒数阶段手动关
         _recordRequested = settings.autoRecord;
+        // 计数器跳起来时不能息屏；设置里可关
+        await _landmarker.setKeepScreenOn(settings.keepAwake);
       } catch (_) {
-        // 读设置失败不影响计数，用默认语音 + 自动录像开
+        // 读设置失败不影响计数，用默认语音 + 自动录像 + 常亮开
         _recordRequested = true;
+        await _landmarker.setKeepScreenOn(true);
       }
       await _voice.init();
       await _landmarker.init();
@@ -543,6 +546,8 @@ class _LivePageState extends State<LivePage> {
   }
 
   Future<void> _stop() async {
+    // 训练页关闭/结束时恢复系统息屏，避免结果页也一直亮着
+    await _landmarker.setKeepScreenOn(false);
     await _sub?.cancel();
     _sub = null;
     await _lmSub?.cancel();
@@ -575,6 +580,7 @@ class _LivePageState extends State<LivePage> {
     _countdownTimer?.cancel();
     _voice.dispose();
     _controller?.dispose();
+    unawaited(_landmarker.setKeepScreenOn(false));
     _landmarker.dispose();
     super.dispose();
   }
