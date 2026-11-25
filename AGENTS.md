@@ -295,7 +295,8 @@ MOVE_X_MAX=0.25  TILT_MAX=35   KNEE_MIN=100
   `setKeepScreenOn`（`FLAG_KEEP_SCREEN_ON`），结束/离开/`dispose` 时清掉；
   「我的」页可关。不要改成 MainActivity 无条件加，否则首页/记录页也常亮。
 - 1080p：CameraX `Quality.FHD` 优先，失败降级 HD/SD；导出用 Media3
-  Transformer + `BitmapOverlay`，按 `jumps`/`start_offset_ms` 画计数和倒计时。
+  Transformer + `BitmapOverlay`，按 `jumps`/`start_offset_ms` 画「当前个数/总数」
+  和倒计时。
   导出文件在 cache，完成后写 MediaStore（Movies/跳绳）；分享用 content URI。
 - Media3 版本必须和 `video_player` 解析到的一致（当前 **1.9.0**）。1.6 起
   `OverlaySettings` 从 `androidx.media3.effect` 移到 `androidx.media3.common`，

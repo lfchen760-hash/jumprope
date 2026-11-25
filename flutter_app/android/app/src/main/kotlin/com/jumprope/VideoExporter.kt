@@ -305,9 +305,9 @@ private class CountOverlay(
             text,
         )
 
-        // 中央计数
+        // 中央计数：当前个数/本次总数
         text.textSize = h * 0.13f
-        canvas.drawText("$count", w / 2, h * 0.68f, text)
+        canvas.drawText("$count/${jumps.size}", w / 2, h * 0.68f, text)
         text.textSize = h * 0.032f
         canvas.drawText("次", w / 2, h * 0.72f, text)
 
