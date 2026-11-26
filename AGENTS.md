@@ -287,7 +287,8 @@ MOVE_X_MAX=0.25  TILT_MAX=35   KNEE_MIN=100
   只保留 3 天（`VideoStore.cleanup()` 启动时执行）；删会话时删文件 + 行。
   `start_offset_ms` = 开始录制时会话的活动时间，后期把 jumps 映射到视频。
   录像**默认自动开始**（`AppSettings.autoRecord` 默认 true，「我的」页可关；
-  计数开始时启录，定位/倒数阶段点摄像机可取消本次）。麦克风权限被拒时自动
+  计数开始时启录（自动录会晚 1.5s，先让「开始」人声和计数跑起来），
+  定位/倒数阶段点摄像机可取消本次）。麦克风权限被拒时自动
   改录无声视频；启动 500ms 后查 `isRecording`，防止
   “启动成功但立刻 Finalize”导致没有文件。结果页入口在数字下方，记录列表
   用「看录像」文字入口；不要只放小图标（用户找不到）。
@@ -304,6 +305,9 @@ MOVE_X_MAX=0.25  TILT_MAX=35   KNEE_MIN=100
   `NoClassDefFoundError`。
 - TTS 数字必须先过 `numberToChinese()`，否则 110 会被读成「幺幺零」；
   不要直接 `say('$count')`。
+- 录像会占麦克风/音频焦点：TTS 必须 `setAudioAttributesForNavigation()` 且
+  `speak(..., focus: true)`（flutter_tts >= 4.2.5），否则「开始/报数」会被录像
+  抢焦点后静音。自动录像延后 1.5s 起录，别在 `running` 第一帧就开录。
 - 权限入口：`MainActivity` **不再**自动申请 CAMERA；首页 `_startSession`
   调 `requestSessionPermissions()` 一次申请 CAMERA + RECORD_AUDIO，
   再进 `LivePage(audioGranted: ...)`。不要在 live_page 里再加权限弹窗。
@@ -405,6 +409,13 @@ unzip -l app-release.apk | grep wav   # 必须能看到 res/*.wav
 并在结束/离开/`dispose` 时清掉。排查顺序：设置是否读到、activity 是否非空、
 `PosePlugin` 的 `setKeepScreenOn` 分支有没有进。不要改成 MainActivity 无条件
 加 flag，否则首页/记录页也一直亮。
+
+### 录像开着时人声消失
+
+自动录像在 `running` 第一帧就开录，会抢音频焦点/麦克风，表现为「开始和报数
+没声音」，有时还伴随前几秒不计数的错觉。现在：TTS 用导航音频属性 + 逐句
+`focus: true`，自动录像延后 1.5s。排查先看诊断面板的 `voice=`（ready/status）
+和 `dartFrames/dartPoses`；如果人声仍无，再看是否被系统音量/勿扰模式压掉。
 
 ### Flutter 3.47 把 material.dart 标记为 deprecated
 

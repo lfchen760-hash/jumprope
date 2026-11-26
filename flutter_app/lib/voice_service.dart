@@ -30,6 +30,13 @@ class VoiceService {
           'engines=${engines is List ? engines.length : engines} '
           'langs=${langs is List ? langs.length : langs} '
           'zhAvail=$avail setLang=$set';
+      // 录像会占用麦克风；把 TTS 标成导航语音并逐句申请焦点，
+      // 避免「开始 / 报数」被录像抢走音频焦点后静音。
+      try {
+        await _tts.setAudioAttributesForNavigation();
+      } catch (_) {
+        // 旧引擎不支持该属性时不影响播报
+      }
       await _tts.setSpeechRate(0.52);
       await _tts.setVolume(1.0);
       await _tts.setPitch(1.0);
@@ -47,7 +54,7 @@ class VoiceService {
     if (!enabled || !_ready || text.isEmpty) return;
     try {
       if (interrupt) await _tts.stop();
-      await _tts.speak(text);
+      await _tts.speak(text, focus: true);
     } catch (_) {
       // 没有 TTS 引擎时不影响计数
     }

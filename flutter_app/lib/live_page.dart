@@ -76,6 +76,7 @@ class _LivePageState extends State<LivePage> {
   bool _recording = false;
   bool _videoPaused = false;
   bool _videoStarting = false;
+  Timer? _videoStartTimer;
   int _videoStartOffsetMs = 0;
   RecordedVideo? _recordedVideo;
   String? _videoError;
@@ -135,7 +136,9 @@ class _LivePageState extends State<LivePage> {
     }
     if (s.phase == SessionPhase.running) {
       _voice.announceCount(s.count);
-      if (_recordRequested && !_recording) unawaited(_startVideo());
+      if (_recordRequested && !_recording && !_videoStarting) {
+        _scheduleAutoVideo();
+      }
       if (_recording && _videoPaused) {
         _videoPaused = false;
         unawaited(_video.resume());
@@ -377,6 +380,18 @@ class _LivePageState extends State<LivePage> {
     }
   }
 
+  /// 自动录像晚 1.5 秒起步：先让「开始」播完、计数跑起来，
+  /// 避免一开录就抢音频/相机资源，导致人声没了或前几跳漏计。
+  void _scheduleAutoVideo() {
+    if (_videoStartTimer != null) return;
+    _videoStartTimer = Timer(const Duration(milliseconds: 1500), () {
+      _videoStartTimer = null;
+      if (!mounted || !_recordRequested || _recording || _videoStarting) return;
+      if (_state.phase != SessionPhase.running) return;
+      unawaited(_startVideo());
+    });
+  }
+
   Future<void> _toggleRecord() async {
     if (_recording) {
       await _stopVideo();
@@ -546,6 +561,8 @@ class _LivePageState extends State<LivePage> {
   }
 
   Future<void> _stop() async {
+    _videoStartTimer?.cancel();
+    _videoStartTimer = null;
     // 训练页关闭/结束时恢复系统息屏，避免结果页也一直亮着
     await _landmarker.setKeepScreenOn(false);
     await _sub?.cancel();
@@ -562,6 +579,8 @@ class _LivePageState extends State<LivePage> {
 
   @override
   void dispose() {
+    _videoStartTimer?.cancel();
+    _videoStartTimer = null;
     if (_recording) {
       // 页面被直接销毁（非正常结束）时兜底：停录像并删文件
       unawaited(
